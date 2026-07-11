@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Fri, 10 Jul 2026 19:12:02 -0700
+Subject: [PATCH] ui/build: allow perl in the path sandbox
+
+The inline Linux 4.9 kernel build (kernel/motorola/sdm632 graft) invokes perl
+(lib/build_OID_registry, timeconst.pl, ...). Stock AOSP's path allowlist omits
+perl, so the sandboxed build errors on first use. LineageOS allows it for
+kernel builds.
+
+Change-Id: Ie597f8af10990d760d047ba2407bfa348c13d6eb
+---
+ ui/build/paths/config.go | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/ui/build/paths/config.go b/ui/build/paths/config.go
+index 110ddee894ad..01f0a448a792 100644
+--- a/ui/build/paths/config.go
++++ b/ui/build/paths/config.go
+@@ -101,6 +101,11 @@ var Configuration = map[string]PathConfig{
+ 	"javap":       Allowed,
+ 	"lsof":        Allowed,
+ 	"openssl":     Allowed,
++	// perl is required by the inline kernel build (e.g. lib/build_OID_registry
++	// generating lib/oid_registry_data.c, timeconst.pl, etc.) for the
++	// kernel/motorola/sdm632 4.9 source graft. Not in stock AOSP's allowlist
++	// (falls to Missing -> errors on use); LineageOS allows it for kernel builds.
++	"perl":        Allowed,
+ 	"pstree":      Allowed,
+ 	"rsync":       Allowed,
+ 	"sh":          Allowed,

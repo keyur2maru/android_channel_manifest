@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Fri, 10 Jul 2026 19:12:27 -0700
+Subject: [PATCH 2/2] SurfaceFlinger: gate the blur algorithm on mSupportsBlur
+
+init() hard-coded chooseBlurAlgorithm(true), forcing blur pipeline setup even
+when blur is not supported. Use mSupportsBlur so it follows the device/
+RenderEngine capability.
+
+Change-Id: Id2c9b64890b7795aaa87ac0b31ec54770682fdb1
+---
+ services/surfaceflinger/SurfaceFlinger.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/services/surfaceflinger/SurfaceFlinger.cpp b/services/surfaceflinger/SurfaceFlinger.cpp
+index 7565080d29ef8..ecb236fec4148 100644
+--- a/services/surfaceflinger/SurfaceFlinger.cpp
++++ b/services/surfaceflinger/SurfaceFlinger.cpp
+@@ -951,7 +951,7 @@ void SurfaceFlinger::init() FTL_FAKE_GUARD(kMainThreadContext) {
+                            .setImageCacheSize(maxFrameBufferAcquiredBuffers)
+                            .setEnableProtectedContext(enable_protected_contents(false))
+                            .setPrecacheToneMapperShaderOnly(false)
+-                           .setBlurAlgorithm(chooseBlurAlgorithm(true))
++                           .setBlurAlgorithm(chooseBlurAlgorithm(mSupportsBlur))
+                            .setContextPriority(
+                                    useContextPriority
+                                            ? renderengine::RenderEngine::ContextPriority::Realtime

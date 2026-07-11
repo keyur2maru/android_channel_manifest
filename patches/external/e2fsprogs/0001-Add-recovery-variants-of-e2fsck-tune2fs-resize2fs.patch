@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Fri, 10 Jul 2026 19:12:06 -0700
+Subject: [PATCH] Add recovery variants of e2fsck/tune2fs/resize2fs
+
+The LineageOS recovery (bootable/recovery graft) links these filesystem tools
+into the recovery image via recovery_deps. Stock AOSP only builds the system and
+microdroid variants.
+
+Change-Id: If458dfe0cf7612a017236175cfb1dbefd3e9027c
+---
+ e2fsck/Android.bp | 9 +++++++++
+ misc/Android.bp   | 9 +++++++++
+ resize/Android.bp | 9 +++++++++
+ 3 files changed, 27 insertions(+)
+
+diff --git a/e2fsck/Android.bp b/e2fsck/Android.bp
+index 4bb94668e9e..9bf36b99721 100644
+--- a/e2fsck/Android.bp
++++ b/e2fsck/Android.bp
+@@ -69,6 +69,15 @@ cc_binary {
+     bootstrap: true,
+ }
+ 
++// channel: recovery variant required by LineageOS recovery_deps (bootable/recovery).
++cc_binary {
++    name: "e2fsck.recovery",
++    defaults: ["e2fsck-defaults"],
++    recovery: true,
++    stem: "e2fsck",
++    shared_libs: e2fsck_libs,
++}
++
+ cc_binary {
+     name: "e2fsck.microdroid",
+     defaults: ["e2fsck-defaults"],
+diff --git a/misc/Android.bp b/misc/Android.bp
+index aeb8f112ddb..a3ab672b78a 100644
+--- a/misc/Android.bp
++++ b/misc/Android.bp
+@@ -186,6 +186,15 @@ cc_binary {
+     shared_libs: tune2fs_libs,
+ }
+ 
++// channel: recovery variant required by LineageOS recovery_deps (bootable/recovery).
++cc_binary {
++    name: "tune2fs.recovery",
++    defaults: ["tune2fs-defaults"],
++    recovery: true,
++    stem: "tune2fs",
++    shared_libs: tune2fs_libs,
++}
++
+ cc_binary {
+     name: "tune2fs_static",
+     static_executable: true,
+diff --git a/resize/Android.bp b/resize/Android.bp
+index 947874dc8ef..d075177b592 100644
+--- a/resize/Android.bp
++++ b/resize/Android.bp
+@@ -48,6 +48,15 @@ cc_binary {
+     },
+ }
+ 
++// channel: recovery variant required by LineageOS recovery_deps (bootable/recovery).
++cc_binary {
++    name: "resize2fs.recovery",
++    defaults: ["resize2fs-defaults"],
++    recovery: true,
++    stem: "resize2fs",
++    shared_libs: resize2fs_libs,
++}
++
+ cc_binary {
+     name: "resize2fs.microdroid",
+     defaults: ["resize2fs-defaults"],

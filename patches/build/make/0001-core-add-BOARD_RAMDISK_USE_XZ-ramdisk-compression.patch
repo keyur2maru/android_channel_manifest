@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Fri, 10 Jul 2026 19:11:59 -0700
+Subject: [PATCH] core: add BOARD_RAMDISK_USE_XZ ramdisk compression
+
+The channel boot.img ramdisk must be xz-compressed: the Moto G7 Play aboot
+enforces a ramdisk size limit that gzip/lz4 exceed (a truncated ramdisk faults
+early in boot). Add an xz branch to the ramdisk compression select and wire up
+the XZ host-tool path. --check=crc32 is mandatory (the kernel XZ decoder only
+supports CRC32/none, not xz's default CRC64). Ported from LineageOS.
+
+Change-Id: I6643d9d6427c357b28e466f85cd106c552f665a1
+---
+ core/Makefile  | 9 +++++++++
+ core/config.mk | 1 +
+ 2 files changed, 10 insertions(+)
+
+diff --git a/core/Makefile b/core/Makefile
+index 39cad66a4443..b23432485cda 100644
+--- a/core/Makefile
++++ b/core/Makefile
+@@ -1102,6 +1102,12 @@ ifeq ($(BOARD_RAMDISK_USE_LZ4),true)
+ COMPRESSION_COMMAND_DEPS := $(LZ4)
+ COMPRESSION_COMMAND := $(LZ4) -l -12 --favor-decSpeed
+ RAMDISK_EXT := .lz4
++else ifeq ($(BOARD_RAMDISK_USE_XZ),true)
++# --check=crc32 is required: the kernel XZ decoder only supports CRC32/none
++# (not xz's default CRC64). --lzma2=dict=32MiB bounds the decode dictionary.
++COMPRESSION_COMMAND_DEPS := $(XZ)
++COMPRESSION_COMMAND := $(XZ) -f -c --check=crc32 --lzma2=dict=32MiB
++RAMDISK_EXT := .xz
+ else
+ COMPRESSION_COMMAND_DEPS := $(GZIP)
+ COMPRESSION_COMMAND := $(GZIP)
+@@ -6108,6 +6114,9 @@ endif
+ ifeq ($(BOARD_RAMDISK_USE_LZ4),true)
+ 	echo "lz4_ramdisks=true" >> $@
+ endif
++ifeq ($(BOARD_RAMDISK_USE_XZ),true)
++	echo "xz_ramdisks=true" >> $@
++endif
+ ifneq ($(INSTALLED_VENDOR_BOOTIMAGE_TARGET),)
+ 	echo "vendor_boot=true" >> $@
+ 	echo "vendor_boot_size=$(BOARD_VENDOR_BOOTIMAGE_PARTITION_SIZE)" >> $@
+diff --git a/core/config.mk b/core/config.mk
+index 60a99c2ed5db..0f5af433a1ac 100644
+--- a/core/config.mk
++++ b/core/config.mk
+@@ -718,6 +718,7 @@ NANOPB_SRCS := $(HOST_OUT_EXECUTABLES)/protoc-gen-nanopb
+ MKBOOTFS := $(HOST_OUT_EXECUTABLES)/mkbootfs$(HOST_EXECUTABLE_SUFFIX)
+ MINIGZIP := $(GZIP)
+ LZ4 := $(HOST_OUT_EXECUTABLES)/lz4$(HOST_EXECUTABLE_SUFFIX)
++XZ := prebuilts/build-tools/$(HOST_PREBUILT_TAG)/bin/xz
+ ifeq (,$(strip $(BOARD_CUSTOM_MKBOOTIMG)))
+ MKBOOTIMG := $(HOST_OUT_EXECUTABLES)/mkbootimg$(HOST_EXECUTABLE_SUFFIX)
+ else

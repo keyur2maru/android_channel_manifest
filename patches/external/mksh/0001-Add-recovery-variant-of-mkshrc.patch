@@ -1,0 +1,33 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Fri, 10 Jul 2026 19:12:05 -0700
+Subject: [PATCH] Add recovery variant of mkshrc
+
+The LineageOS recovery (bootable/recovery graft) pulls mkshrc into the recovery
+ramdisk. Stock AOSP mksh only builds the system and vendor mkshrc.
+
+Change-Id: I9a51f82f92030b694563912e50648a44dc835451
+---
+ Android.bp | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/Android.bp b/Android.bp
+index 5e6eb88..7851bc7 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -352,6 +352,15 @@ prebuilt_etc {
+     src: "mkshrc",
+ }
+ 
++// channel: recovery variant (/etc/mkshrc in recovery) required by LineageOS
++// recovery module (bootable/recovery).
++prebuilt_etc {
++    name: "mkshrc.recovery",
++    src: "mkshrc",
++    filename: "mkshrc",
++    recovery: true,
++}
++
+ // /vendor/etc/mkshrc
+ prebuilt_etc {
+     name: "mkshrc_vendor",
