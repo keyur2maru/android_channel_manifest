@@ -56,12 +56,9 @@ running the stock ROM or a LineageOS build. _(extract-files.sh: TODO — for now
 ```bash
 source build/envsetup.sh
 lunch aosp_channel-cp2a-userdebug
-m droid            # boot.img, system, vendor (erofs), dtbo
+m droid            # emits directly-flashable boot.img (xz ramdisk, recovery-as-boot),
+                   # system.img, vendor.img (erofs), dtbo.img — no repack needed
 ```
-
-_(Note: `m droid` → directly-flashable images is the in-progress build-parity work; the
-current daily driver uses a per-image build + a boot.img repack with an xz ramdisk. See
-the project notes.)_
 
 ## 5. Flash
 
