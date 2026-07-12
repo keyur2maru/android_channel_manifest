@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Keyur Maru <kd2maru@gmail.com>
 Date: Fri, 10 Jul 2026 19:12:02 -0700
-Subject: [PATCH] ui/build: allow perl in the path sandbox
+Subject: [PATCH 1/2] ui/build: allow perl in the path sandbox
 
 The inline Linux 4.9 kernel build (kernel/motorola/sdm632 graft) invokes perl
 (lib/build_OID_registry, timeconst.pl, ...). Stock AOSP's path allowlist omits
