@@ -46,8 +46,8 @@
   <project path="external/gptfdisk" name="android_external_gptfdisk" remote="los" revision="e4ade03e5a96a0779edbefc616b4b89d0737af76" />
 
   <!--
-    The following AOSP projects carry small downstream patches (applied post-sync by
-    device/motorola/channel/apply-aosp-patches.sh); they stay on the AOSP base manifest:
+    The following AOSP projects carry small downstream patches (applied post-sync by the manifest repo's
+    apply-aosp-patches.sh); they stay on the AOSP base manifest:
       build/make  build/soong  external/e2fsprogs  external/mksh
       frameworks/base  frameworks/hardware/interfaces  frameworks/native
   -->
