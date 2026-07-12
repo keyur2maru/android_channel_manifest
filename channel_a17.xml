@@ -25,7 +25,7 @@
   <project path="bootable/recovery" name="android_bootable_recovery" remote="keyur" revision="b4470eee62dc3b295ecb68b51298354942a74f63" />
   <project path="device/motorola/sdm632-common" name="android_device_motorola_sdm632-common" remote="keyur" revision="63cb17078ce4ea6d6ec89143811c47f50007411b" />
   <project path="device/motorola/channel" name="android_device_motorola_channel" remote="keyur" revision="2df4df0441d15a7429df7b649ffd5312395abc8a" />
-  <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="ac8359383de0fefbde48a7ca6bb71010e3713a79" />
+  <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="39154c20bbb0fc0eadc0f22448b431dbe651c842" />
 
   <!-- ===== LineageOS grafts (unchanged; pinned) — github.com/LineageOS ===== -->
   <project path="vendor/lineage" name="android_vendor_lineage" remote="los" revision="97fe2ec7acf4b4c93d6f4a0ac4d50d8aa8e078f9" />
