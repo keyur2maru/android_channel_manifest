@@ -46,10 +46,20 @@ Idempotent — safe to re-run; it skips patches already applied.
 
 ## 3. Proprietary blobs
 
-The Motorola/Qualcomm A11 vendor blobs (654 `.so`, ~400 MB) can't be redistributed.
-Provide them under `vendor/motorola/{channel,sdm632-common}` by extracting from a device
-running the stock ROM or a LineageOS build. _(extract-files.sh: TODO — for now, copy the
-`vendor/motorola/{channel,sdm632-common}` trees from a known-good checkout.)_
+The Motorola/Qualcomm A11 vendor blobs (~400 MB) can't be redistributed. Extract them with
+the stock LineageOS `extract-utils` — `extract-files.py`/`proprietary-files.txt` already ship
+in the device trees and `tools/extract-utils` is pinned in the manifest — from a device
+running the stock ROM (or a LineageOS build):
+
+```bash
+# device connected via adb (stock ROM / LineageOS):
+( cd device/motorola/sdm632-common && ./extract-files.py adb )
+( cd device/motorola/channel       && ./extract-files.py adb )
+# or from a stock ROM / OTA zip:   ./extract-files.py <path-to-rom.zip>
+```
+
+This populates `vendor/motorola/{channel,sdm632-common}`. No custom scripting — pure stock
+LineageOS flow.
 
 ## 4. Build
 

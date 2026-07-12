@@ -45,6 +45,8 @@
   <project path="vendor/codeaurora/telephony" name="android_vendor_codeaurora_telephony" remote="los" revision="7c646f8194d7915073701168b7c0ffd559f32773" />
   <project path="external/gptfdisk" name="android_external_gptfdisk" remote="los" revision="e4ade03e5a96a0779edbefc616b4b89d0737af76" />
 
+  <project path="tools/extract-utils" name="android_tools_extract-utils" remote="los" revision="3f351b85d09ac0160ee42130dff6b0c695333b86" />
+
   <!--
     The following AOSP projects carry small downstream patches (applied post-sync by the manifest repo's
     apply-aosp-patches.sh); they stay on the AOSP base manifest:
