@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:10:06 -0700
+Subject: [PATCH] power-libperfmgr: disable the lineage-libperfmgr power HAL
+
+aosp_channel does not use android.hardware.power-service.lineage-libperfmgr;
+it ships the AOSP example power HAL (see device/motorola/sdm632-common). The
+modules here hard-depend on libperfmgr, libpixelstats and pixel-power-ext from
+hardware/google/pixel, which is a Pixel-only tree and is not grafted into this
+AOSP-17 tree, so soong fails analysis on the missing deps (and on the
+"hardware/google/pixel" namespace import).
+
+Comment out both modules and drop the pixel namespace import. The bodies are
+left in place as a comment so the HAL can be restored verbatim if
+hardware/google/pixel is ever grafted.
+---
+ power-libperfmgr/Android.bp | 87 +++++++------------------------------
+ 1 file changed, 16 insertions(+), 71 deletions(-)
+
+diff --git a/power-libperfmgr/Android.bp b/power-libperfmgr/Android.bp
+index f0a6a89..0a767da 100644
+--- a/power-libperfmgr/Android.bp
++++ b/power-libperfmgr/Android.bp
+@@ -7,77 +7,22 @@
+ soong_namespace {
+     imports: [
+         "hardware/google/interfaces",
+-        "hardware/google/pixel",
+     ],
+ }
+ 
+-cc_binary {
+-    name: "android.hardware.power-service.lineage-libperfmgr",
+-    defaults: ["android.hardware.power-ndk_shared"],
+-    relative_install_path: "hw",
+-    init_rc: ["aidl/android.hardware.power-service.lineage-libperfmgr.rc"],
+-    vintf_fragments: ["aidl/android.hardware.power-service.lineage.xml"],
+-    vendor: true,
+-    cflags: [
+-        "-Wno-unused-variable",
+-        "-Wno-unused-parameter",
+-        "-Wthread-safety",
+-    ],
+-    shared_libs: [
+-        "android.hardware.thermal@2.0",
+-        "android.hardware.thermal-V1-ndk",
+-        "libbase",
+-        "libbinder_ndk",
+-        "libcutils",
+-        "libdl",
+-        "liblog",
+-        "libperfmgr",
+-        "libprocessgroup",
+-        "libutils",
+-        "pixel-power-ext-V1-ndk",
+-        "android.frameworks.stats-V2-ndk",
+-        "android.hardware.common.fmq-V1-ndk",
+-        "libfmq",
+-    ],
+-    static_libs: [
+-        "libgmock",
+-        "libgtest",
+-        "libpixelstats",
+-    ],
+-    whole_static_libs: select(soong_config_variable("power_libperfmgr", "mode_extension_lib"), {
+-        any @ flag_val: [flag_val],
+-        default: ["libperfmgr-ext"],
+-    }),
+-    srcs: [
+-        "aidl/BackgroundWorker.cpp",
+-        "aidl/ChannelGroup.cpp",
+-        "aidl/ChannelManager.cpp",
+-        "aidl/MetricUploader.cpp",
+-        "aidl/GpuCalculationHelpers.cpp",
+-        "aidl/GpuCapacityNode.cpp",
+-        "aidl/service.cpp",
+-        "aidl/InteractionHandler.cpp",
+-        "aidl/Power.cpp",
+-        "aidl/PowerExt.cpp",
+-        "aidl/PowerHintSession.cpp",
+-        "aidl/PowerSessionManager.cpp",
+-        "aidl/SupportManager.cpp",
+-        "aidl/UClampVoter.cpp",
+-        "aidl/SessionRecords.cpp",
+-        "aidl/SessionChannel.cpp",
+-        "aidl/SessionTaskMap.cpp",
+-        "aidl/SessionValueEntry.cpp",
+-        "aidl/TaskRampupMultNode.cpp",
+-        "aidl/utils/ThermalStateListener.cpp",
+-    ],
+-    cpp_std: "gnu++20",
+-}
+-
+-cc_library_static {
+-    name: "libperfmgr-ext",
+-    defaults: ["android.hardware.power-ndk_shared"],
+-    vendor: true,
+-    srcs: [
+-        "aidl/PowerModeExtension.cpp",
+-    ],
+-}
++// NOTE (aosp_channel fork): the lineage-libperfmgr power HAL below is disabled.
++// aosp_channel uses android.hardware.power-service-qti (see
++// device/motorola/sdm632-common/common.mk), not this HAL, and these modules
++// depend on libperfmgr / libpixelstats / pixel-power-ext from
++// hardware/google/pixel, which is not grafted into this tree. Re-enable and
++// graft hardware/google/pixel if the libperfmgr power HAL is ever needed.
++//
++// cc_binary {
++//     name: "android.hardware.power-service.lineage-libperfmgr",
++//     ... (depends on libperfmgr, libpixelstats, pixel-power-ext-V1-ndk) ...
++// }
++//
++// cc_library_static {
++//     name: "libperfmgr-ext",
++//     ...
++// }

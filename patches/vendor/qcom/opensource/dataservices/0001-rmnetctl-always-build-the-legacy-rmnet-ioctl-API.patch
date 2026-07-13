@@ -1,0 +1,43 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:10:06 -0700
+Subject: [PATCH] rmnetctl: always build the legacy rmnet ioctl API
+
+librmnetctl gates the old ioctl-based rmnet API behind the rmnetctl.old_rmnet_data
+soong config variable. That select was not being applied on this target even
+though the device sets it (sdm632-common BoardConfigCommon.mk), so librmnetctl.so
+shipped only the newer rtrmnet_* netlink API and the A10-era netmgrd / adpl vendor
+blobs failed to resolve rmnetctl_init and
+rmnet_set_link_ingress_data_format_tailspace at dlopen time, taking down data.
+
+The USE_OLD_RMNET_DATA block is purely additive (the rtrmnet_* entry points stay),
+so define it unconditionally instead of relying on the select. This board runs a
+4.9 kernel with the old rmnet_data driver, so the legacy API is the one that
+matches the kernel anyway.
+---
+ rmnetctl/Android.bp | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/rmnetctl/Android.bp b/rmnetctl/Android.bp
+index cc0fef5..d1a0760 100644
+--- a/rmnetctl/Android.bp
++++ b/rmnetctl/Android.bp
+@@ -9,10 +9,14 @@ cc_defaults {
+     cflags: [
+         "-Wall",
+         "-Werror",
+-    ] + select(soong_config_variable("rmnetctl", "old_rmnet_data"), {
+-        "true": ["-DUSE_OLD_RMNET_DATA"],
+-        default: [],
+-    }),
++        // channel A17: force the OLD rmnet ioctl API on unconditionally. The soong_config
++        // select (rmnetctl.old_rmnet_data, set in device BoardConfigCommon.mk:282) was NOT
++        // being applied, so librmnetctl.so shipped only the new rtrmnet_* netlink API and the
++        // A10 netmgrd/adpl vendor blobs failed dlopen at runtime on rmnetctl_init /
++        // rmnet_set_link_ingress_data_format_tailspace. The USE_OLD_RMNET_DATA block is
++        // ADDITIVE (keeps rtrmnet_*), so hardcoding it is safe on this 4.9-kernel board.
++        "-DUSE_OLD_RMNET_DATA",
++    ],
+     header_libs: ["librmnetctl_headers"],
+     vendor: true,
+ }

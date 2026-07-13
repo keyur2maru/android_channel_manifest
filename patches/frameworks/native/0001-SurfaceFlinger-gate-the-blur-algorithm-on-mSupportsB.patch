@@ -7,7 +7,6 @@ init() hard-coded chooseBlurAlgorithm(true), forcing blur pipeline setup even
 when blur is not supported. Use mSupportsBlur so it follows the device/
 RenderEngine capability.
 
-Change-Id: Id2c9b64890b7795aaa87ac0b31ec54770682fdb1
 ---
  services/surfaceflinger/SurfaceFlinger.cpp | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)

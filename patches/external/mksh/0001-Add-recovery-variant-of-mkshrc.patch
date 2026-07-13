@@ -6,7 +6,6 @@ Subject: [PATCH] Add recovery variant of mkshrc
 The LineageOS recovery (bootable/recovery graft) pulls mkshrc into the recovery
 ramdisk. Stock AOSP mksh only builds the system and vendor mkshrc.
 
-Change-Id: I9a51f82f92030b694563912e50648a44dc835451
 ---
  Android.bp | 9 +++++++++
  1 file changed, 9 insertions(+)

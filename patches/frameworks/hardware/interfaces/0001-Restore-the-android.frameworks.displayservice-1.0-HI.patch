@@ -8,7 +8,6 @@ AOSP-17 dropped this interface, but the proprietary camera.msm8953 blob
 (vendor/motorola/channel) has a DT_NEEDED on the @1.0 32-bit variant. Re-add
 the HIDL definition so the vendor camera HAL links.
 
-Change-Id: Ia4e9c57bb63611a54e7fbab1753546315f513c85
 ---
  displayservice/1.0/Android.bp                | 22 +++++++
  displayservice/1.0/IDisplayEventReceiver.hal | 66 ++++++++++++++++++++

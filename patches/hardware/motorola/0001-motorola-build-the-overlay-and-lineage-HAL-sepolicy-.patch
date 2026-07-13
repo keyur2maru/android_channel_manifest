@@ -1,0 +1,70 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:10:06 -0700
+Subject: [PATCH] motorola: build the overlay and lineage-HAL sepolicy without
+ the LineageOS framework
+
+This tree assumes a full LineageOS build; on plain AOSP-17 two of its
+assumptions do not hold:
+
+- overlay: the MotoEuicc phony pulls in EuiccPolicy, the LineageOS framework
+  eSIM-policy app, which is not grafted here. Keep only the device-specific
+  EuiccPolicyMoto RRO.
+- sepolicy: the lineage-HAL sepolicy framework (the hal_attribute_lineage macro
+  and the domain type declarations it emits) lives in LineageOS' system/sepolicy
+  and is absent from AOSP's, so hal_lineage_touch_default and
+  hal_lineage_powershare_default were never declared and recovery_sepolicy.cil
+  failed to compile with "unknown type hal_lineage_touch_default". The rules in
+  these files use the domain types directly rather than the lineage HAL
+  attribute, so declaring the types (plus the touch service's exec_type and
+  init_daemon_domain, exec label already set in this dir's file_contexts) is
+  sufficient and stays neverallow-safe.
+---
+ overlay/Android.bp                                    |  3 ++-
+ sepolicy/qti/vendor/hal_lineage_powershare_default.te |  5 +++++
+ sepolicy/qti/vendor/hal_lineage_touch_default.te      | 11 +++++++++++
+ 3 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/overlay/Android.bp b/overlay/Android.bp
+index 81c890a..7b74c89 100644
+--- a/overlay/Android.bp
++++ b/overlay/Android.bp
+@@ -13,7 +13,8 @@ phony {
+ phony {
+     name: "MotoEuicc",
+     required: [
+-        "EuiccPolicy",
++        // EuiccPolicy is the LineageOS framework eSIM-policy app, not grafted
++        // into this AOSP tree. Keep only the device-specific Moto RRO.
+         "EuiccPolicyMoto",
+     ]
+ }
+diff --git a/sepolicy/qti/vendor/hal_lineage_powershare_default.te b/sepolicy/qti/vendor/hal_lineage_powershare_default.te
+index ff811e9..60b7c3c 100644
+--- a/sepolicy/qti/vendor/hal_lineage_powershare_default.te
++++ b/sepolicy/qti/vendor/hal_lineage_powershare_default.te
+@@ -1,2 +1,7 @@
++# lineage-HAL framework not grafted into AOSP system/sepolicy; declare the
++# vendor.lineage.powershare service domain type (used directly by the rules below)
++# so recovery_sepolicy.cil compiles. Bare domain decl = neverallow-safe.
++type hal_lineage_powershare_default, domain;
++
+ allow hal_lineage_powershare_default vendor_sysfs_usb_supply:dir r_dir_perms;
+ allow hal_lineage_powershare_default vendor_sysfs_wlc:file rw_file_perms;
+diff --git a/sepolicy/qti/vendor/hal_lineage_touch_default.te b/sepolicy/qti/vendor/hal_lineage_touch_default.te
+index 0569fd6..31cd3ca 100644
+--- a/sepolicy/qti/vendor/hal_lineage_touch_default.te
++++ b/sepolicy/qti/vendor/hal_lineage_touch_default.te
+@@ -1 +1,12 @@
++# The lineage-HAL sepolicy framework (hal_attribute_lineage macro + these domain
++# type declarations) is not grafted into this AOSP system/sepolicy, so the
++# vendor.lineage.touch AIDL service domain types were undeclared -> recovery_sepolicy.cil
++# failed with "unknown type hal_lineage_touch_default". The allow rules here use the
++# domain types directly (not the hal_lineage_touch attribute), so declaring them as
++# domains/exec_type is sufficient and neverallow-safe. (Exec labeled on
++# /vendor/bin/hw/vendor.lineage.touch-service.motorola in this dir's file_contexts.)
++type hal_lineage_touch_default, domain;
++type hal_lineage_touch_default_exec, exec_type, vendor_file_type, file_type;
++init_daemon_domain(hal_lineage_touch_default)
++
+ rw_dir_file(hal_lineage_touch_default, vendor_sysfs_touchpanel)

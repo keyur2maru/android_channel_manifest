@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:10:06 -0700
+Subject: [PATCH] compat: adapt the vendor shims to the AOSP-17 ABI
+
+The LineageOS compat shims are built against lineage-23.0's libgui/libgralloc/
+libaudioclient. Three AOSP-17 ABI deltas broke them on this tree:
+
+- libgui: AOSP-17 makes libgui itself vendor_available, so there is no separate
+  "libgui_vendor" to link against; point libgui_shim_vendor at "libgui". Our
+  harvested msm8953 vendor blobs (composer / allocator / display HALs) still
+  carry a NEEDED on libgui_vendor.so, so also provide a libgui_vendor shim with
+  the same ABI surface to satisfy them at load time.
+- SurfaceComposerClient: AOSP-17 inserted a `uid_t ownerUid` parameter before
+  `requestedRefreshRate` in createVirtualDisplay(). The shim declaration is an
+  ABI bridge whose mangled name must match the real libgui symbol, so it has to
+  carry the new parameter or the link fails with "undefined symbol"; the 4-arg
+  convenience overload passes gui::Uid::INVALID ((uid_t)-1).
+- Versioned AIDL deps: AOSP-17 pulls graphics.common-V7 (via libgralloctypes)
+  and audio.common.types-V5 (via libaudioclient / libaudiofoundation). Bump the
+  shims from V6/V4 so only one version of each interface is in the graph.
+---
+ Android.bp                       | 24 +++++++++++++++++++++---
+ libgui/SurfaceComposerClient.cpp |  5 ++++-
+ libgui/SurfaceComposerClient.h   |  8 +++++++-
+ 3 files changed, 32 insertions(+), 5 deletions(-)
+
+diff --git a/Android.bp b/Android.bp
+index 9449eb4..4ecd0c7 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -286,7 +286,21 @@ cc_library {
+ cc_library {
+     name: "libgui_shim_vendor",
+     defaults: ["libgui_shim_defaults"],
+-    shared_libs: ["libgui_vendor"],
++    // AOSP 17 libgui is vendor_available, so the vendor variant is just
++    // "libgui" (LineageOS' separate "libgui_vendor" is unnecessary here).
++    shared_libs: ["libgui"],
++    vendor: true,
++}
++
++// channel A17 bring-up: our harvested msm8953 vendor blobs (composer/allocator/
++// display HALs) still carry a NEEDED for "libgui_vendor.so" (the LOS naming) that
++// extract-files' add_needed(libgui_shim_vendor) didn't remove. Provide it: same
++// ABI-shim as libgui_shim_vendor (old GraphicBufferProducer/SurfaceComposerClient
++// symbols) and it pulls in the current vendor libgui for the rest.
++cc_library_shared {
++    name: "libgui_vendor",
++    defaults: ["libgui_shim_defaults"],
++    shared_libs: ["libgui"],
+     vendor: true,
+ }
+ 
+@@ -415,7 +429,9 @@ cc_prebuilt_library_shared {
+         none: true,
+     },
+     shared_libs: [
+-        "android.hardware.graphics.common-V6-ndk",
++        // A17 libgralloctypes pulls graphics.common-V7-ndk; bump V6->V7 to keep
++        // a single version in this prebuilt's dependency graph.
++        "android.hardware.graphics.common-V7-ndk",
+         "android.hardware.graphics.allocator-V2-ndk",
+         "android.hardware.graphics.allocator@2.0",
+         "android.hardware.graphics.allocator@3.0",
+@@ -509,7 +525,9 @@ cc_library_shared {
+ cc_library_shared {
+     name: "libwfdservice_shim",
+     shared_libs: [
+-        "android.media.audio.common.types-V4-cpp",
++        // A17 libaudioclient/libaudiofoundation pull audio.common.types-V5;
++        // bump V4->V5 so only one version is in the graph.
++        "android.media.audio.common.types-V5-cpp",
+         "audioclient-types-aidl-cpp",
+         "libaudioclient",
+         "libaudiofoundation",
+diff --git a/libgui/SurfaceComposerClient.cpp b/libgui/SurfaceComposerClient.cpp
+index 939bf89..c591f82 100644
+--- a/libgui/SurfaceComposerClient.cpp
++++ b/libgui/SurfaceComposerClient.cpp
+@@ -13,7 +13,10 @@ std::string kEmpty;
+ 
+ sp<IBinder> createVirtualDisplay(const std::string& displayName, bool isSecure,
+                                  const std::string& uniqueId, float requestedRefreshRate) {
+-    return createVirtualDisplay(displayName, isSecure, true, uniqueId, requestedRefreshRate);
++    // ownerUid = INVALID ((uid_t)-1), matching libgui's gui::Uid::INVALID default;
++    // the extra param matches AOSP-17's createVirtualDisplay signature (see header).
++    return createVirtualDisplay(displayName, isSecure, true, uniqueId,
++                                static_cast<uid_t>(-1), requestedRefreshRate);
+ }
+ 
+ sp<IBinder> createDisplay(const android::String8& displayName, bool isSecure,
+diff --git a/libgui/SurfaceComposerClient.h b/libgui/SurfaceComposerClient.h
+index b30b8b2..9b53a28 100644
+--- a/libgui/SurfaceComposerClient.h
++++ b/libgui/SurfaceComposerClient.h
+@@ -5,13 +5,19 @@
+  */
+ 
+ #include <binder/IBinder.h>
++#include <sys/types.h>
+ 
+ namespace android {
+ namespace SurfaceComposerClient {
+ 
++// NOTE: this declaration is a deliberate ABI bridge — its mangled name must match
++// libgui's real SurfaceComposerClient::createVirtualDisplay. AOSP-17 inserted a
++// `uid_t ownerUid` param before `requestedRefreshRate` (real symbol:
++// createVirtualDisplay(string,bool,bool,string,unsigned int,float)), so the shim
++// must carry it too or the link fails with "undefined symbol".
+ sp<IBinder> createVirtualDisplay(const std::string& displayName, bool isSecure,
+                                  bool optimizeForPower, const std::string& uniqueId,
+-                                 float requestedRefreshRate);
++                                 uid_t ownerUid, float requestedRefreshRate);
+ sp<IBinder> createVirtualDisplay(const std::string& displayName, bool isSecure,
+                                  const std::string& uniqueId, float requestedRefreshRate);
+ sp<IBinder> createDisplay(const android::String8& displayName, bool isSecure,

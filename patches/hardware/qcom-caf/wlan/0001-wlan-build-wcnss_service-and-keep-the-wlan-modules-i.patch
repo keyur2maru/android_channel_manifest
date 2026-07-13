@@ -1,0 +1,88 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:10:06 -0700
+Subject: [PATCH] wlan: build wcnss_service and keep the wlan modules in the
+ default namespace
+
+Two changes needed to get WCNSS Wi-Fi/BT up on this AOSP-17 target:
+
+- Build wcnss_service from soong. It is the daemon that opens /dev/wcnss_wlan,
+  which is the only thing that drives the kernel's wcnss_node_open() ->
+  wcnss_trigger_config() path and sets wcnss_hw_type = WCNSS_PRONTO_HW. Without
+  it hw_type stays at the WCNSS_RIVA_HW default and pronto PIL power-up fails
+  ("wcnss_core_vregs_on invalid hardware 0" -> "wcnss_wlan_power failed"), so the
+  Wi-Fi firmware never loads and BT fails its SoC patch download. The module is
+  defined in the sibling Android.mk, but that .mk is unreachable on AOSP-17: the
+  top-level Android.mk guards all-subdir-makefiles behind a project-path-for
+  check, and project-path-for no longer exists in AOSP-17 build/make, so the
+  guard is always false. Soong discovers Android.bp regardless, so define it
+  there. TARGET_USES_QCOM_WCNSS_QMI is unset for this target and the QMI code is
+  all behind #ifdef WCNSS_QMI, so only libcutils and liblog are needed.
+
+- Drop the soong_namespace declaration. lib_driver_cmd_qcwcn is static-linked by
+  external/wpa_supplicant_8's hostapd/wpa_supplicant, which live in the default
+  (".") namespace and can therefore only resolve modules in ".". Keeping the wlan
+  modules in the default namespace makes lib_driver_cmd_qcwcn and libcld80211
+  visible to them, and they stay visible to the vendor namespaces since "." is
+  readable from everywhere.
+---
+ Android.bp               | 10 ++++++++--
+ wcnss-service/Android.bp | 34 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 42 insertions(+), 2 deletions(-)
+ create mode 100644 wcnss-service/Android.bp
+
+diff --git a/Android.bp b/Android.bp
+index 9515b25..5da893c 100644
+--- a/Android.bp
++++ b/Android.bp
+@@ -1,2 +1,8 @@
+-soong_namespace {
+-}
++// Intentionally NOT a soong_namespace.
++//
++// The wpa_supplicant_8_lib driver-command lib (lib_driver_cmd_qcwcn) is
++// static-linked by external/wpa_supplicant_8 hostapd/wpa_supplicant, which
++// live in the default (".") namespace and can only read ".". Keeping the wlan
++// modules in the default namespace makes lib_driver_cmd_qcwcn / libcld80211
++// visible to those consumers (and still readable by the vendor namespaces,
++// since "." is readable from everywhere).
+diff --git a/wcnss-service/Android.bp b/wcnss-service/Android.bp
+new file mode 100644
+index 0000000..9dc40ad
+--- /dev/null
++++ b/wcnss-service/Android.bp
+@@ -0,0 +1,34 @@
++// wcnss_service: userspace daemon that opens /dev/wcnss_wlan, which triggers the
++// kernel's wcnss_node_open() -> wcnss_trigger_config() path. That is the ONLY
++// caller that sets penv->wcnss_hw_type = WCNSS_PRONTO_HW (drivers/soc/qcom/wcnss/
++// wcnss_wlan.c). Without it, hw_type stays 0 (WCNSS_RIVA_HW default) and pronto
++// PIL power-up fails with "wcnss_core_vregs_on invalid hardware 0" ->
++// "wcnss_wlan_power failed", so WiFi firmware never loads and BT (shared WCNSS
++// pronto radio) fails SoC patch download.
++//
++// This module is defined in the sibling Android.mk, but that .mk is never reached
++// on AOSP-17: hardware/qcom-caf/wlan/Android.mk gates all-subdir-makefiles behind
++// `ifeq ($(call my-dir),$(call project-path-for,qcom-wlan))`, and the legacy
++// `project-path-for` macro no longer exists in AOSP-17 build/make, so the guard is
++// always false and no kati module under this tree is built. Soong auto-discovers
++// Android.bp regardless of that guard, so we build wcnss_service here.
++//
++// Non-QMI configuration (TARGET_USES_QCOM_WCNSS_QMI is unset for this target): the
++// QMI MAC-address code in wcnss_service.c is all behind #ifdef WCNSS_QMI, so only
++// libcutils (cutils/properties.h) and liblog (cutils/log.h) are needed. The
++// open()-triggered config path is unconditional and does not depend on QMI.
++
++cc_binary {
++    name: "wcnss_service",
++    srcs: ["wcnss_service.c"],
++    shared_libs: [
++        "libcutils",
++        "liblog",
++    ],
++    cflags: [
++        "-Wall",
++        "-Werror",
++        "-Wno-unused-parameter",
++    ],
++    vendor: true,
++}

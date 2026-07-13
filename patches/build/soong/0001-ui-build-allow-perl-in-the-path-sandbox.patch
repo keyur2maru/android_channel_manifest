@@ -8,7 +8,6 @@ The inline Linux 4.9 kernel build (kernel/motorola/sdm632 graft) invokes perl
 perl, so the sandboxed build errors on first use. LineageOS allows it for
 kernel builds.
 
-Change-Id: Ie597f8af10990d760d047ba2407bfa348c13d6eb
 ---
  ui/build/paths/config.go | 5 +++++
  1 file changed, 5 insertions(+)

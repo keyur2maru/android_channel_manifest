@@ -9,7 +9,6 @@ early in boot). Add an xz branch to the ramdisk compression select and wire up
 the XZ host-tool path. --check=crc32 is mandatory (the kernel XZ decoder only
 supports CRC32/none, not xz's default CRC64). Ported from LineageOS.
 
-Change-Id: I6643d9d6427c357b28e466f85cd106c552f665a1
 ---
  core/Makefile  | 9 +++++++++
  core/config.mk | 1 +

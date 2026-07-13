@@ -32,11 +32,27 @@ repo sync -j"$(nproc)"
 This pulls the AOSP base, the LineageOS lineage-23.0 grafts (device/kernel/hardware
 scaffolding), and the `channel` forks (github.com/keyur2maru).
 
-## 2. Apply the AOSP framework/build patches
+## 2. Apply the patches
 
 The device / kernel / hardware / graphics changes are git forks pinned by the manifest.
-A few small AOSP framework/build tweaks (xz ramdisk, `perl` in the build sandbox, a
-recovery HAL bump, …) ride as patches:
+Everything else that needs changing rides as a patch, applied post-sync by
+`apply-aosp-patches.sh`:
+
+- **AOSP base tweaks** — xz ramdisk, `perl` in the build sandbox, a recovery HAL bump,
+  the Mesa KGSL graphics port, … (`build/make`, `build/soong`, `external/e2fsprogs`,
+  `external/mesa3d`, `external/mksh`, `frameworks/hardware/interfaces`,
+  `frameworks/native`, `system/tools/hidl`).
+- **LineageOS graft tweaks** — the grafts are pinned to *unmodified* upstream LineageOS,
+  so the handful of changes needed to build them against AOSP-17 (rather than a full
+  LineageOS tree) are patches too: `hardware/lineage/compat` (AOSP-17 libgui/gralloc/audio
+  ABI), `hardware/lineage/interfaces` (drop the Pixel-dependent power HAL),
+  `hardware/motorola` (overlay + lineage-HAL sepolicy without the LOS framework),
+  `hardware/qcom-caf/wlan` (build `wcnss_service`; keep the wlan modules in the default
+  namespace), `vendor/qcom/opensource/dataservices` (legacy rmnet ioctl API),
+  `vendor/codeaurora/telephony` (IMS compat entry points).
+- **A generated namespace stub** — `hardware/qcom-caf/msm8953/Android.bp`. That path is
+  owned by no git project (only its `audio/`, `media/`, `display/` children are projects),
+  so `repo sync` never creates it and it can't be a patch; the script writes it.
 
 (The former gralloc2-mapper and flashlight source patches were migrated off AOSP
 source to device release-config aconfig flag values — see the `vendor/lineage`
@@ -109,9 +125,10 @@ fastboot reboot
   LineageOS's `lineage_generator` soong plugin (the module type behind
   `generated_kernel_includes`/`generated_kernel_headers`). Without it `soong_build` cannot
   bootstrap the plugin and **the tree will not build at all**.
-- **Grafts**: LineageOS lineage-23.0 (pinned in the manifest).
-- **AOSP patches**: `patches/` (applied by `apply-aosp-patches.sh`) — build/make, build/soong,
-  external/e2fsprogs, external/mesa3d, external/mksh, frameworks/hardware/interfaces,
-  frameworks/native.
+- **Grafts**: LineageOS lineage-23.0, pinned in the manifest to **unmodified** upstream SHAs.
+  Six of them need small changes to build against AOSP-17 instead of a full LineageOS tree;
+  those ship as patches (see step 2), not forks, so the graft SHAs stay honest.
+- **Patches**: `patches/<project-path>/` (applied by `apply-aosp-patches.sh`) — 8 AOSP-base
+  projects + 6 LineageOS grafts, plus one generated namespace stub. See step 2.
 
 All revisions are pinned to exact SHAs in `channel_a17.xml` for reproducibility.

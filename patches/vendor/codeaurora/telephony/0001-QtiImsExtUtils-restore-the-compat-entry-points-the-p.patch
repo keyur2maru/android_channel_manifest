@@ -1,0 +1,56 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:10:06 -0700
+Subject: [PATCH] QtiImsExtUtils: restore the compat entry points the prebuilt
+ ImsService calls
+
+The prebuilt org.codeaurora.ims ImsService we ship is the lineage-23.0 CAF build
+and still calls two QtiImsExtUtils methods that were dropped upstream in 24.0:
+getAutoReject(ContentResolver, int) from onStackConfigChanged(), and
+isCallTransferEnabled(Context). With them missing the phone process crash-loops
+with NoSuchMethodError as soon as the IMS stack comes up.
+
+Re-add both as thin compat wrappers (getAutoReject delegates to the current
+getAutoRejectMode; isCallTransferEnabled reads the ims_call_transfer global that
+23.0 used) so the legacy ImsService binds cleanly.
+---
+ .../codeaurora/ims/utils/QtiImsExtUtils.java  | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/ims/ims-ext-common/src/org/codeaurora/ims/utils/QtiImsExtUtils.java b/ims/ims-ext-common/src/org/codeaurora/ims/utils/QtiImsExtUtils.java
+index 171d169..bb322ea 100644
+--- a/ims/ims-ext-common/src/org/codeaurora/ims/utils/QtiImsExtUtils.java
++++ b/ims/ims-ext-common/src/org/codeaurora/ims/utils/QtiImsExtUtils.java
+@@ -129,6 +129,10 @@ public class QtiImsExtUtils {
+     public static final String QTI_IMS_STATIC_IMAGE_SETTING =
+             "ims_vt_call_static_image";
+ 
++    /* Compat: legacy prebuilt org.codeaurora.ims ImsService (lineage-23.0 CAF ABI) still calls
++       QtiImsExtUtils.isCallTransferEnabled(Context); this key was carried in 23.0. */
++    private static final String IMS_CALL_TRANSFER_SETTING = "ims_call_transfer";
++
+     /* Ims phoneId extra key */
+     public static final String QTI_IMS_PHONE_ID_EXTRA_KEY = "phoneId";
+ 
+@@ -779,6 +783,21 @@ public class QtiImsExtUtils {
+                 QtiCallConstants.AR_MODE_ALLOW_INCOMING);
+     }
+ 
++    // Compat method for legacy IMS APKs (carried in lineage-23.0, dropped in 24.0).
++    // The prebuilt org.codeaurora.ims ImsService.onStackConfigChanged() calls this exact
++    // 2-arg int signature; without it phone crash-loops with NoSuchMethodError.
++    public static int getAutoReject(ContentResolver contentResolver, int phoneId) {
++        return getAutoRejectMode(contentResolver, phoneId);
++    }
++
++    // Compat method for legacy IMS APKs (carried in lineage-23.0, dropped in 24.0).
++    // The prebuilt org.codeaurora.ims ImsService also calls this; kept to avoid a
++    // follow-on NoSuchMethodError once getAutoReject is resolved.
++    public static boolean isCallTransferEnabled(Context context) {
++        return Settings.Global.getInt(context.getContentResolver(), IMS_CALL_TRANSFER_SETTING, 0)
++                == 1;
++    }
++
+     public static boolean canAcceptAsOneWayVideo(int phoneId, Context context) {
+         return (isCarrierConfigEnabled(phoneId, context,
+                 QtiCarrierConfigs.ALLOW_ONE_WAY_ACCEPT_FOR_VIDEO_CALL));

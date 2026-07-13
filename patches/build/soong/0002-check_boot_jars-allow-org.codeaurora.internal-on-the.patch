@@ -10,7 +10,6 @@ check (run only by the full `m droid` target, not per-image builds) rejects it b
 that package is not on the allow list, failing the build at platform-bootclasspath.
 Allow-list it, matching how LineageOS carries telephony-ext.
 
-Change-Id: I55e3177739d19daedb3ea3befe13adf2f3ba97b7
 ---
  scripts/check_boot_jars/package_allowed_list.txt | 6 ++++++
  1 file changed, 6 insertions(+)

@@ -32,32 +32,55 @@
        tree will not build at all. It also carries the device release-config aconfig values. -->
   <project path="vendor/lineage" name="android_vendor_lineage" remote="keyur" revision="e5aae1892a0dd2a9074f777b4ebd333eb3abd8b6" />
 
-  <!-- ===== LineageOS grafts (unchanged; pinned) — github.com/LineageOS ===== -->
+  <!-- ===== LineageOS grafts (pinned to upstream LOS) — github.com/LineageOS =====
+       Grafts marked (+patch) are synced UNMODIFIED from LineageOS and then carry a small
+       downstream patch applied post-sync by apply-aosp-patches.sh (see patches/<path>/).
+       Everything else in this section is used as-is. -->
   <project path="lineage-sdk" name="android_lineage-sdk" remote="los" revision="35a5305af30466ef946d6089986c3183d3fb63c7" />
+  <!-- (+patch) disable the pixel-dependent lineage-libperfmgr power HAL -->
   <project path="hardware/lineage/interfaces" name="android_hardware_lineage_interfaces" remote="los" revision="16960713e9caf855910d4cea79a57bda917ef8ad" />
+  <!-- (+patch) adapt the vendor shims to the AOSP-17 libgui/gralloc/audio ABI -->
   <project path="hardware/lineage/compat" name="android_hardware_lineage_compat" remote="los" revision="b7992333fe7e0558f6466b1a579c9ffdac802a5f" />
   <project path="device/qcom/sepolicy_vndr" name="android_device_qcom_sepolicy_vndr" remote="los" revision="32aefa594c09321bf7de3f46d66fae0c51312701" />
+  <!-- (+patch) build the overlay + lineage-HAL sepolicy without the LineageOS framework -->
   <project path="hardware/motorola" name="android_hardware_motorola" remote="los" revision="3d9f503d38a1d414a5f09eeb6d809b602adbda62" />
   <project path="hardware/qcom-caf/common" name="android_hardware_qcom-caf_common" remote="los" revision="28e41faa850af0cc137e3b0384ed0ea440262979" />
   <project path="hardware/qcom-caf/msm8953/audio" name="android_hardware_qcom_audio" remote="los" revision="f9ff4f29d8f330a8a97c4d3b49de5d9f37ebcb8a" />
   <project path="hardware/qcom-caf/msm8953/media" name="android_hardware_qcom_media" remote="los" revision="9861d78316d1933b3d0a20cf9139a3a23aa88fd7" />
+  <!-- (+patch) WCNSS Wi-Fi/BT: provides wcnss_service, lib_driver_cmd_qcwcn and libcld80211.
+       This is the device-correct, blob-matching wlan tree; the AOSP base manifest's own
+       hardware/qcom/wlan (a different path, so no conflict) is disabled by the device via
+       TARGET_USES_HARDWARE_QCOM_WLAN := false in sdm632-common BoardConfigCommon.mk. -->
+  <project path="hardware/qcom-caf/wlan" name="android_hardware_qcom_wlan" remote="los" revision="93b212ac5b9ff8a8327c14effe9ec2a880d32f9c" />
   <project path="packages/resources/devicesettings" name="android_packages_resources_devicesettings" remote="los" revision="d7edce7d422913c9ae776d05af511f2fc0929e4c" />
   <project path="vendor/qcom/opensource/interfaces" name="android_vendor_qcom_opensource_interfaces" remote="los" revision="dd3c9a9a2a136f649fa8ece063aea2ac0e581ec0" />
   <project path="vendor/qcom/opensource/usb" name="android_vendor_qcom_opensource_usb" remote="los" revision="827db6563f39582949289bf676fe9d00ed5d45d1" />
   <project path="vendor/qcom/opensource/vibrator" name="android_vendor_qcom_opensource_vibrator" remote="los" revision="7636b284f04d59024e48d1480bf822cadd3005f6" />
+  <!-- (+patch) always build librmnetctl's legacy rmnet ioctl API (A10 netmgrd/adpl blobs) -->
   <project path="vendor/qcom/opensource/dataservices" name="android_vendor_qcom_opensource_dataservices" remote="los" revision="74ea427a735d7bfe01b480a126583d837980aaa1" />
+  <!-- (+patch) restore the QtiImsExtUtils entry points the prebuilt ImsService calls -->
   <project path="vendor/codeaurora/telephony" name="android_vendor_codeaurora_telephony" remote="los" revision="7c646f8194d7915073701168b7c0ffd559f32773" />
   <project path="external/gptfdisk" name="android_external_gptfdisk" remote="los" revision="e4ade03e5a96a0779edbefc616b4b89d0737af76" />
 
   <project path="tools/extract-utils" name="android_tools_extract-utils" remote="los" revision="3f351b85d09ac0160ee42130dff6b0c695333b86" />
 
   <!--
-    The following AOSP projects carry small downstream patches (applied post-sync by the manifest repo's
-    apply-aosp-patches.sh); they stay on the AOSP base manifest:
-      build/make  build/soong  external/e2fsprogs  external/mesa3d  external/mksh
-      frameworks/hardware/interfaces  frameworks/native  system/tools/hidl
+    PATCH-CARRYING PROJECTS — synced unmodified (from the AOSP base manifest above, or from
+    LineageOS in the graft section) and then patched post-sync by this repo's
+    apply-aosp-patches.sh. Nothing here is forked; the patches live in patches/<project-path>/.
+
+      AOSP base:  build/make  build/soong  external/e2fsprogs  external/mesa3d  external/mksh
+                  frameworks/hardware/interfaces  frameworks/native  system/tools/hidl
+      LOS grafts: hardware/lineage/compat  hardware/lineage/interfaces  hardware/motorola
+                  hardware/qcom-caf/wlan  vendor/codeaurora/telephony
+                  vendor/qcom/opensource/dataservices
+
     (external/mesa3d = the KGSL winsys graphics port; system/tools/hidl = allowlist the restored
      displayservice@1.0 HIDL interface. The former frameworks/base flashlight patch was migrated to a
      vendor/lineage release-config aconfig flag value and is no longer a source patch.)
+
+    apply-aosp-patches.sh also generates hardware/qcom-caf/msm8953/Android.bp — a soong_namespace
+    stub at a path no git project owns (only its audio/media/display children are projects), so it
+    cannot ride as a patch and repo sync never creates it.
   -->
 </manifest>

@@ -7,7 +7,6 @@ The LineageOS recovery (bootable/recovery graft) links these filesystem tools
 into the recovery image via recovery_deps. Stock AOSP only builds the system and
 microdroid variants.
 
-Change-Id: If458dfe0cf7612a017236175cfb1dbefd3e9027c
 ---
  e2fsck/Android.bp | 9 +++++++++
  misc/Android.bp   | 9 +++++++++

@@ -22,18 +22,60 @@ PATCHES="$HERE/patches"
 export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-channel builder}"
 export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-channel@localhost}"
 
+##
+## Step 1 — lay down generated namespace stub files.
+##
+## A couple of Android.bp files in this tree sit at a path that NO git project owns,
+## so they cannot ride as a git-am patch (there is nothing to apply them to). Under
+## hardware/qcom-caf/msm8953 only the CHILDREN (audio/, media/, display/) are repo
+## projects — the msm8953 directory itself is not — yet soong needs an Android.bp
+## there to declare the namespace those children live in. `repo sync` never creates
+## it, so we generate it here.
+##
+## NOTE: the two other unowned Android.bp files in the tree,
+##   vendor/motorola/sdm632-common/Android.bp  and  vendor/motorola/channel/Android.bp
+## do NOT need recreating — they are emitted by the blob extraction
+## (extract-files.py / setup-makefiles.py; see README step 3) and ship with the
+## extracted vendor blobs.
+##
+## Idempotent: only writes when the file is missing or its content differs.
+write_stub() { # $1 = tree-relative path, $2 = content
+  local path="$TOP/$1" content="$2"
+  if [ -f "$path" ] && [ "$(cat "$path")" = "$content" ]; then
+    echo "OK    $1  (namespace stub already present)"
+    return
+  fi
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' "$content" > "$path"
+  echo "WRITE $1  (namespace stub)"
+}
+
+write_stub hardware/qcom-caf/msm8953/Android.bp 'soong_namespace {
+    imports: [
+        "vendor/qcom/opensource/commonsys-intf/display",
+    ],
+}'
+
+##
+## Step 2 — apply the per-project patches.
+##
 applied=0 skipped=0
 while IFS= read -r d; do
   proj="${d#"$PATCHES"/}"
   repo="$TOP/$proj"
-  [ -d "$repo/.git" ] || { echo "SKIP  $proj  (not synced)"; skipped=$((skipped+1)); continue; }
 
-  # gather this project's patches in order
+  # gather this project's patches in order; intermediate dirs (patches/hardware,
+  # patches/vendor/qcom, …) hold no patches of their own — skip them silently.
   mapfile -t pfiles < <(ls "$d"/*.patch 2>/dev/null | sort)
   [ "${#pfiles[@]}" -eq 0 ] && continue
 
-  # already applied? (match the first patch's subject in recent history)
-  subj=$(sed -n 's/^Subject: \[PATCH[^]]*\] //p' "${pfiles[0]}" | head -1)
+  [ -d "$repo/.git" ] || { echo "SKIP  $proj  (not synced)"; skipped=$((skipped+1)); continue; }
+
+  # Already applied? (match the first patch's subject in recent history.) Use
+  # git mailinfo rather than sed: format-patch FOLDS long subjects across
+  # continuation lines, and mailinfo unfolds them exactly the way git am does,
+  # so this compares against the same string that lands in the commit log.
+  subj=$(git mailinfo /dev/null /dev/null < "${pfiles[0]}" 2>/dev/null | sed -n 's/^Subject: //p' | head -1)
   if [ -n "$subj" ] && git -C "$repo" log -50 --format='%s' | grep -qxF "$subj"; then
     echo "SKIP  $proj  (already applied)"; skipped=$((skipped+1)); continue
   fi
