@@ -26,9 +26,13 @@
   <project path="device/motorola/sdm632-common" name="android_device_motorola_sdm632-common" remote="keyur" revision="63cb17078ce4ea6d6ec89143811c47f50007411b" />
   <project path="device/motorola/channel" name="android_device_motorola_channel" remote="keyur" revision="2df4df0441d15a7429df7b649ffd5312395abc8a" />
   <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="d163ad6b72935cb79c3f3510a836025f53ac8cc2" />
+  <!-- vendor/lineage is a FORK, not a graft: it carries the AOSP-17 port of LineageOS's
+       lineage_generator soong plugin (the module type behind generated_kernel_includes /
+       generated_kernel_headers). Without it soong_build cannot bootstrap the plugin and the
+       tree will not build at all. It also carries the device release-config aconfig values. -->
+  <project path="vendor/lineage" name="android_vendor_lineage" remote="keyur" revision="e5aae1892a0dd2a9074f777b4ebd333eb3abd8b6" />
 
   <!-- ===== LineageOS grafts (unchanged; pinned) — github.com/LineageOS ===== -->
-  <project path="vendor/lineage" name="android_vendor_lineage" remote="los" revision="97fe2ec7acf4b4c93d6f4a0ac4d50d8aa8e078f9" />
   <project path="lineage-sdk" name="android_lineage-sdk" remote="los" revision="35a5305af30466ef946d6089986c3183d3fb63c7" />
   <project path="hardware/lineage/interfaces" name="android_hardware_lineage_interfaces" remote="los" revision="16960713e9caf855910d4cea79a57bda917ef8ad" />
   <project path="hardware/lineage/compat" name="android_hardware_lineage_compat" remote="los" revision="b7992333fe7e0558f6466b1a579c9ffdac802a5f" />

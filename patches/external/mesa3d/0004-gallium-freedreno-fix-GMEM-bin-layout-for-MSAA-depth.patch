@@ -1,0 +1,87 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 02:15:47 -0700
+Subject: [PATCH 4/4] gallium/freedreno: fix GMEM bin layout for MSAA
+ depth/stencil
+
+Two bugs in the GMEM key/layout path, both of which hang or fault an a5xx
+(Adreno 506) as soon as an MSAA depth/stencil buffer is used.
+
+The fdl layout's cpp already includes the sample multiplier (fd5_layout.c
+computes cpp = blocksize * nr_samples), so multiplying by pfb->samples when
+filling in key->zsbuf_cpp double-counts samples.  For 4x MSAA Z24S8 that yields
+cpp 64 instead of 16 -- a depth/stencil buffer that cannot fit GMEM even at the
+minimum tile size, and a layout that overflows GMEM and resolves out of bounds
+into a GPU write translation fault.  Use layout->cpp directly.
+
+That over-large cpp also exposed the second bug: calc_nbins()'s search loop
+increments nbins_x/nbins_y until layout_gmem() fits, with no bound.  Once both
+dimensions are subdivided to the minimum tile size the bin dimensions -- and so
+the per-bin GMEM footprint -- can no longer shrink, so if the layout still does
+not fit the loop simply spins forever, hanging the render thread.  Bound the
+search by the minimum achievable tile size and clamp to the smallest layout,
+warning once, instead of never terminating.
+---
+ .../drivers/freedreno/freedreno_gmem.c        | 35 +++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/src/gallium/drivers/freedreno/freedreno_gmem.c b/src/gallium/drivers/freedreno/freedreno_gmem.c
+index 9f7124d..9497fd9 100644
+--- a/src/gallium/drivers/freedreno/freedreno_gmem.c
++++ b/src/gallium/drivers/freedreno/freedreno_gmem.c
+@@ -232,12 +232,36 @@ calc_nbins(struct gmem_key *key, struct fd_gmem_stateobj *gmem)
+    /* then find a bin width/height that satisfies the memory
+     * constraints:
+     */
++   /* channel A17: bound the search.  Once both dimensions are subdivided down
++    * to the minimum tile size, bin_w/bin_h (and thus per-bin GMEM use) can no
++    * longer shrink, so if layout_gmem() still doesn't fit, incrementing nbins
++    * forever is a pure infinite loop (observed hanging the render thread when
++    * the reported GMEM size is too small for a given cbuf/zsbuf cpp).  Clamp to
++    * the smallest achievable layout instead of spinning. */
++   uint32_t max_nbins_x = DIV_ROUND_UP(key->width, screen->info->tile_align_w);
++   uint32_t max_nbins_y = DIV_ROUND_UP(key->height, screen->info->tile_align_h);
+    while (!layout_gmem(key, nbins_x, nbins_y, gmem)) {
+       if (nbins_y > nbins_x) {
+          nbins_x++;
+       } else {
+          nbins_y++;
+       }
++      if ((nbins_x >= max_nbins_x) && (nbins_y >= max_nbins_y)) {
++         nbins_x = MAX2(1, max_nbins_x);
++         nbins_y = MAX2(1, max_nbins_y);
++         static bool warned = false;
++         if (!warned) {
++            warned = true;
++            mesa_logw("fd_gmem: layout did not converge (gmemsize=0x%x "
++                      "%ux%u cbuf0_cpp=%u zs_cpp=%u tile_align=%ux%u) - "
++                      "clamping to %ux%u bins",
++                      screen->gmemsize_bytes, key->width, key->height,
++                      key->cbuf_cpp[0], key->zsbuf_cpp[0],
++                      screen->info->tile_align_w, screen->info->tile_align_h,
++                      nbins_x, nbins_y);
++         }
++         break;
++      }
+    }
+ 
+    /* Lets see if we can tweak the layout a bit and come up with
+@@ -462,9 +486,16 @@ gmem_key_init(struct fd_batch *batch, bool assume_zs, bool no_scis_opt)
+ 
+    if (has_zs || assume_zs) {
+       struct fd_resource *rsc = fd_resource(pfb->zsbuf.texture);
+-      key->zsbuf_cpp[0] = rsc->layout.cpp * pfb->samples;
++      /* channel A17: fdl layout->cpp ALREADY includes the MSAA sample
++       * multiplier (fd5_layout.c: cpp = blocksize * nr_samples), so multiplying
++       * by pfb->samples here double-counts samples.  For 4x MSAA Z24S8 that
++       * yields cpp=64 instead of 16, which cannot fit GMEM even at the minimum
++       * tile size -> the calc_nbins() search never converges (infinite loop) and
++       * the resulting layout overflows GMEM (out-of-bounds resolve -> GPU write
++       * translation fault).  Use layout->cpp directly, matching upstream Mesa. */
++      key->zsbuf_cpp[0] = rsc->layout.cpp;
+       if (rsc->stencil)
+-         key->zsbuf_cpp[1] = rsc->stencil->layout.cpp * pfb->samples;
++         key->zsbuf_cpp[1] = rsc->stencil->layout.cpp;
+ 
+       /* If we clear z or s but not both, and we are using z24s8 (ie.
+        * !separate_stencil) then we need to restore the other, even if

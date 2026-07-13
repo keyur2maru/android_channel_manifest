@@ -42,6 +42,19 @@ recovery HAL bump, …) ride as patches:
 source to device release-config aconfig flag values — see the `vendor/lineage`
 fork; that fork is required for those two behaviors.)
 
+**Graphics (`patches/external/mesa3d/`, 4 patches).** These add a **KGSL winsys backend**
+to Freedreno so Mesa can drive the Adreno 506 through the downstream KGSL kernel driver
+(this SoC has no DRM/`msm` KMS driver). Two things to know:
+
+- ⚠️ **The patches are inert on their own.** Nothing in `external/mesa3d` turns the backend
+  on — the switch is `BOARD_MESA3D_EXTRA_MESON_ARGS := -Dfreedreno-kmds=kgsl` in the
+  `device/motorola/sdm632-common` fork. You need **both halves**.
+- ⚖️ **Attribution.** The KGSL backend is **derived community work**, not original to this
+  port: the per-file MIT headers and `src/freedreno/drm/kgsl/README.aosp.md` credit the
+  freedreno community KGSL winsys (Mesa MR !21570 / termux `xMeM`), with portions from
+  turnip's `tu_kgsl.c` (© Rob Clark / Google). **Please keep those headers and the README
+  intact** in any redistribution or upstreaming.
+
 ```bash
 bash android_channel_manifest/apply-aosp-patches.sh   # run from the AOSP tree root
 ```
@@ -86,12 +99,19 @@ fastboot reboot
 ```
 
 ## Layout / provenance
-- **Forks** (github.com/keyur2maru, branch `channel-17.0`; kernel `bpf-54plus-channel`):
+- **Forks** (github.com/keyur2maru, branch `channel-17.0`; kernel branch `ebpf-channel`):
   `android_device_motorola_channel`, `android_device_motorola_sdm632-common`,
   `android_device_qcom_sepolicy`, `android_hardware_qcom_display`,
   `android_vendor_qcom_opensource_display-commonsys-intf`, `android_bootable_recovery`,
-  `android_kernel_motorola_sdm632`.
+  `android_kernel_motorola_sdm632`, **`android_vendor_lineage`**.
+
+  `vendor/lineage` is a **fork, not a graft** — it carries the AOSP-17 adaptation of
+  LineageOS's `lineage_generator` soong plugin (the module type behind
+  `generated_kernel_includes`/`generated_kernel_headers`). Without it `soong_build` cannot
+  bootstrap the plugin and **the tree will not build at all**.
 - **Grafts**: LineageOS lineage-23.0 (pinned in the manifest).
-- **AOSP patches**: `patches/` (applied by `apply-aosp-patches.sh`).
+- **AOSP patches**: `patches/` (applied by `apply-aosp-patches.sh`) — build/make, build/soong,
+  external/e2fsprogs, external/mesa3d, external/mksh, frameworks/hardware/interfaces,
+  frameworks/native.
 
 All revisions are pinned to exact SHAs in `channel_a17.xml` for reproducibility.

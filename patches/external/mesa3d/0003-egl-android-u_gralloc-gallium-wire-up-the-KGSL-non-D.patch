@@ -1,0 +1,317 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 02:15:47 -0700
+Subject: [PATCH 3/4] egl/android, u_gralloc, gallium: wire up the KGSL
+ (non-DRM) buffer path
+
+With the KGSL winsys in place the GPU can be driven, but nothing can reach it:
+every layer above assumes the GPU fd is a DRM node.  /dev/kgsl-3d0 is not, so
+DRM enumeration finds no device, drmGetVersion() and drmGetCap() both fail on
+the fd, and EGL comes up with zero configs -- SurfaceFlinger's chooseEglConfig()
+then aborts and nothing renders.  Teach the loaders and the gralloc import path
+about a GPU that has no DRM node.
+
+platform_android: when DRM enumeration finds nothing, open /dev/kgsl-3d0
+directly and force the freedreno ("msm") gallium driver; fd_device_new() detects
+KGSL when drmGetVersion() fails on the fd.  Only on the hardware path -- for a
+software/swrast request this branch must be skipped, or dri2_create_screen()
+picks DRI_SCREEN_SWRAST while droid_probe_device() installs an image-loader
+extension list with no __DRI_SWRAST_LOADER, and drisw_init_screen() dereferences
+a NULL swrast_loader.  Likewise, dri2_setup_device()'s render-capability probe
+cannot succeed on a non-DRM fd, so fall back to the software EGLDevice (which is
+only consumed by EGL_EXT_device_query) rather than failing init outright.  Do not
+overwrite a driver_name that was already pinned to "msm" for this path.
+
+pipe_loader_drm: loader_get_driver_for_fd() is drmGetVersion()-based and returns
+NULL for the KGSL fd; assume the freedreno driver instead of failing the probe.
+
+freedreno_screen: u_init_pipe_screen_caps() derives caps->dmabuf from
+drmGetCap(DRM_CAP_PRIME), which fails on a non-DRM fd, leaving dma-buf import
+disabled -- so dri2_from_dma_bufs() rejects every EGL_NATIVE_BUFFER_ANDROID and
+SurfaceFlinger cannot bind a single gralloc buffer as a texture.  The freedreno
+bo layer supports dma-buf import and export on every backend, so advertise both
+unconditionally.
+
+u_gralloc: add the QCOM/CAF Venus video-decoder HAL formats emitted by msm8953.
+They are absent from <hardware/gralloc.h> (they live in the display HAL's
+QtiGrallocDefs.h), so they are defined by value here and mapped to their NV12 /
+NV21 fourccs; they are semi-planar 4:2:0, hence chroma_step 2.  Without this a
+decoded video buffer has no fourcc and cannot be imported at all.
+---
+ src/egl/drivers/dri2/platform_android.c       | 85 ++++++++++++++++++-
+ .../auxiliary/pipe-loader/pipe_loader_drm.c   | 12 ++-
+ .../drivers/freedreno/freedreno_screen.c      |  9 ++
+ src/gallium/frontends/dri/dri2.c              | 12 ++-
+ src/util/u_gralloc/u_gralloc_internal.c       | 31 +++++++
+ 5 files changed, 143 insertions(+), 6 deletions(-)
+
+diff --git a/src/egl/drivers/dri2/platform_android.c b/src/egl/drivers/dri2/platform_android.c
+index 7db9f6b..0c33fab 100644
+--- a/src/egl/drivers/dri2/platform_android.c
++++ b/src/egl/drivers/dri2/platform_android.c
+@@ -83,15 +83,29 @@ droid_create_image_from_native_buffer(_EGLDisplay *disp,
+    struct dri_image *img = NULL;
+ 
+    if (u_gralloc_get_buffer_basic_info(dri2_dpy->gralloc, &gr_handle,
+-                                       &buf_info))
++                                       &buf_info)) {
++      _eglLog(_EGL_WARNING, "channel img: u_gralloc_get_buffer_basic_info FAILED "
++              "(hal_format=0x%x pixel_stride=%d)", buf->format, buf->stride);
+       return NULL;
++   }
+ 
+    if (u_gralloc_get_buffer_color_info(dri2_dpy->gralloc, &gr_handle,
+-                                       &color_info))
++                                       &color_info)) {
++      _eglLog(_EGL_WARNING, "channel img: u_gralloc_get_buffer_color_info FAILED");
+       return NULL;
++   }
++
++   _eglLog(_EGL_DEBUG, "channel img: %dx%d fourcc=0x%x mod=0x%llx planes=%d "
++           "stride0=%d off0=%d fd0=%d", buf->width, buf->height,
++           buf_info.drm_fourcc, (unsigned long long)buf_info.modifier,
++           buf_info.num_planes, buf_info.strides[0], buf_info.offsets[0],
++           buf_info.fds[0]);
+ 
+    img = droid_create_image_from_buffer_info(dri2_dpy, buf->width, buf->height,
+                                              &buf_info, &color_info, priv);
++   if (!img)
++      _eglLog(_EGL_WARNING, "channel img: dri2_from_dma_bufs FAILED (mod=0x%llx), "
++              "retrying with MOD_INVALID", (unsigned long long)buf_info.modifier);
+ 
+    if (!img) {
+       /* If dri driver is gallium virgl, real modifier info queried back from
+@@ -815,6 +829,22 @@ droid_add_configs_for_visuals(_EGLDisplay *disp)
+     * (chadversary) testing on Android Nougat, this was good enough to pacify
+     * the buggy clients.
+     */
++   /* channel A17 diag: dump the driver-provided config color formats so we can
++    * see why no visual matches (e.g. array R8G8B8A8 vs packed RGBA8888). */
++   {
++      int nconf = 0;
++      for (int j = 0; dri2_dpy->driver_configs && dri2_dpy->driver_configs[j]; j++) {
++         const struct gl_config *gc = (const struct gl_config *) dri2_dpy->driver_configs[j];
++         if (nconf < 24)
++            _eglLog(_EGL_DEBUG, "channel cfg[%d] color_format=%s(0x%x) linear=%s",
++                    j, util_format_name(gc->color_format), gc->color_format,
++                    util_format_name(util_format_linear(gc->color_format)));
++         nconf++;
++      }
++      _eglLog(_EGL_DEBUG, "channel: %d driver_configs total; want RGBA8888=0x%x RGBX8888=0x%x B5G6R5=0x%x",
++              nconf, PIPE_FORMAT_RGBA8888_UNORM, PIPE_FORMAT_RGBX8888_UNORM, PIPE_FORMAT_B5G6R5_UNORM);
++   }
++
+    bool has_rgba = false;
+    for (int i = 0; i < ARRAY_SIZE(visuals); i++) {
+       /* Only enable BGRA configs when RGBA is not available. BGRA configs are
+@@ -1021,7 +1051,9 @@ droid_load_driver(_EGLDisplay *disp, bool swrast)
+ 
+    if (disp->Options.Zink)
+       dri2_dpy->driver_name = strdup("zink");
+-   else
++   else if (dri2_dpy->driver_name == NULL)
++      /* channel A17: may be pre-set to "msm" for the kgsl (non-DRM) path;
++       * only auto-detect from the fd when it's a real DRM device. */
+       dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
+    if (dri2_dpy->driver_name == NULL)
+       return false;
+@@ -1163,6 +1195,37 @@ droid_open_device(_EGLDisplay *disp, bool swrast)
+    }
+ 
+    if (dri2_dpy->fd_render_gpu < 0) {
++#ifdef HAVE_FREEDRENO_KGSL
++      /* channel A17: the downstream Adreno "kgsl" GPU driver exposes NO DRM
++       * node, so the DRM enumeration above finds nothing. Open /dev/kgsl-3d0
++       * directly and force the freedreno ("msm") gallium driver; fd_device_new()
++       * detects kgsl when drmGetVersion() fails on this fd.
++       *
++       * Only for the HARDWARE path: when software (ForceSoftware/swrast) is
++       * requested we must NOT take this branch. dri2_detect_swrast_kopper() would
++       * flag swrast=true and dri2_create_screen() would pick DRI_SCREEN_SWRAST,
++       * but droid_probe_device() installs the image-loader extension list which
++       * has no __DRI_SWRAST_LOADER, so drisw_init_screen() derefs a NULL
++       * screen->swrast_loader (crash, fault addr 0x8). Falling through returns
++       * EGL_FALSE and lets dri2_initialize_android() run its proper swrast path
++       * (driver_name="swrast" + droid_swrast_image_loader_extensions). */
++      if (!swrast) {
++         dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
++         if (dri2_dpy->fd_render_gpu >= 0) {
++            free(dri2_dpy->driver_name);
++            dri2_dpy->driver_name = strdup("msm");
++            _eglLog(_EGL_WARNING, "kgsl: /dev/kgsl-3d0 opened (fd %d), creating hw screen",
++                    dri2_dpy->fd_render_gpu);
++            if (droid_probe_device(disp, false))
++               return EGL_TRUE;
++            _eglLog(_EGL_WARNING, "kgsl: /dev/kgsl-3d0 opened but screen create failed");
++            close(dri2_dpy->fd_render_gpu);
++            dri2_dpy->fd_render_gpu = -1;
++         } else {
++            _eglLog(_EGL_WARNING, "kgsl: failed to open /dev/kgsl-3d0");
++         }
++      }
++#endif
+       _eglLog(_EGL_WARNING, "Failed to open %s DRM device",
+               vendor_name ? "desired" : "any");
+       return EGL_FALSE;
+@@ -1213,8 +1276,24 @@ dri2_initialize_android(_EGLDisplay *disp)
+    dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
+ 
+    if (!dri2_dpy->pure_swrast && !dri2_setup_device(disp, false)) {
++#ifdef HAVE_FREEDRENO_KGSL
++      /* channel A17: /dev/kgsl-3d0 is NOT a DRM render node, so
++       * dri2_setup_device()'s render-capability probe fails and
++       * dri_query_compatible_render_only_device_fd() finds no companion DRM
++       * node (returns -1). disp->Device is only consumed by EGL_EXT_device_query,
++       * so fall back to the software-device path (render_fd = -1) to obtain a
++       * valid _EGLDevice instead of aborting init (which would leave zero
++       * EGLConfigs and make SurfaceFlinger's chooseEglConfig abort). */
++      _eglLog(_EGL_WARNING,
++              "kgsl: dri2_setup_device(hw) failed (non-DRM fd); using sw EGLDevice");
++      if (!dri2_setup_device(disp, EGL_TRUE)) {
++         err = "DRI2: failed to setup EGLDevice";
++         goto cleanup;
++      }
++#else
+       err = "DRI2: failed to setup EGLDevice";
+       goto cleanup;
++#endif
+    }
+ 
+    dri2_setup_screen(disp);
+diff --git a/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c b/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
+index b97c526..47201eb 100644
+--- a/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
++++ b/src/gallium/auxiliary/pipe-loader/pipe_loader_drm.c
+@@ -138,8 +138,16 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
+       ddev->base.driver_name = strdup("zink");
+    else
+       ddev->base.driver_name = loader_get_driver_for_fd(fd);
+-   if (!ddev->base.driver_name)
+-      goto fail;
++   if (!ddev->base.driver_name) {
++#ifdef HAVE_FREEDRENO_KGSL
++      /* channel A17: /dev/kgsl-3d0 is not a DRM node, so drmGetVersion-based
++       * detection returns NULL. Assume the freedreno driver -- its DRM
++       * descriptor carries a "kgsl" alias for exactly this case. */
++      ddev->base.driver_name = strdup("kgsl");
++#endif
++      if (!ddev->base.driver_name)
++         goto fail;
++   }
+ 
+    /* For the closed source AMD OpenGL driver, we want libgbm to load
+     * "amdgpu_dri.so", but we want Gallium multimedia drivers to load
+diff --git a/src/gallium/drivers/freedreno/freedreno_screen.c b/src/gallium/drivers/freedreno/freedreno_screen.c
+index 4b128d4..a9eb481 100644
+--- a/src/gallium/drivers/freedreno/freedreno_screen.c
++++ b/src/gallium/drivers/freedreno/freedreno_screen.c
+@@ -373,6 +373,15 @@ fd_init_screen_caps(struct fd_screen *screen)
+ 
+    u_init_pipe_screen_caps(&screen->base, 1);
+ 
++   /* channel A17: u_init_pipe_screen_caps() derives caps->dmabuf from
++    * drmGetCap(DRM_CAP_PRIME), which fails on the kgsl backend because
++    * /dev/kgsl-3d0 is not a DRM device (returns 0 -> dmabuf import disabled,
++    * so EGL_NATIVE_BUFFER_ANDROID / dri2_from_dma_bufs is rejected and
++    * SurfaceFlinger cannot map any gralloc buffer as a texture). The freedreno
++    * bo layer supports dma-buf import (bo_from_dmabuf / GPUOBJ_IMPORT) and
++    * export (fd_bo dmabuf) on every backend, so advertise both unconditionally. */
++   caps->dmabuf = DRM_PRIME_CAP_IMPORT | DRM_PRIME_CAP_EXPORT;
++
+    /* this is probably not totally correct.. but it's a start: */
+ 
+    /* Supported features (boolean caps). */
+diff --git a/src/gallium/frontends/dri/dri2.c b/src/gallium/frontends/dri/dri2.c
+index 292757a..5ec3407 100644
+--- a/src/gallium/frontends/dri/dri2.c
++++ b/src/gallium/frontends/dri/dri2.c
+@@ -1420,6 +1420,7 @@ dri2_from_dma_bufs(struct dri_screen *screen,
+    const struct dri2_format_mapping *map = dri2_get_mapping_by_fourcc(fourcc);
+ 
+    if (!screen->dmabuf_import) {
++      mesa_logi("channel dma: dmabuf_import=0 (screen does not allow dmabuf import) fourcc=0x%x", fourcc);
+       if (error)
+          *error = __DRI_IMAGE_ERROR_BAD_PARAMETER;
+       return NULL;
+@@ -1438,6 +1439,8 @@ dri2_from_dma_bufs(struct dri_screen *screen,
+       flags |= PIPE_BIND_PRIME_BLIT_DST;
+ 
+    const int expected_num_fds = dri2_get_modifier_num_planes(screen, modifier, fourcc);
++   mesa_logd("channel dma: fourcc=0x%x mod=0x%llx map=%p expected_num_fds=%d num_fds=%d",
++             fourcc, (unsigned long long)modifier, (void *)map, expected_num_fds, num_fds);
+    if (!map || expected_num_fds == 0) {
+       err = __DRI_IMAGE_ERROR_BAD_MATCH;
+       goto exit;
+@@ -1469,6 +1472,8 @@ dri2_from_dma_bufs(struct dri_screen *screen,
+    img = dri_create_image_from_winsys(screen, width, height, map,
+                                        num_fds, whandles, flags,
+                                        loaderPrivate);
++   mesa_logd("channel dma: dri_create_image_from_winsys -> %p (pipe_format=0x%x)",
++             (void *)img, map->pipe_format);
+    if (img == NULL) {
+       err = __DRI_IMAGE_ERROR_BAD_ALLOC;
+       goto exit;
+@@ -1758,8 +1763,13 @@ dri2_init_screen(struct dri_screen *screen, bool driver_name_is_inferred)
+    screen->can_share_buffer = true;
+ 
+ #ifdef HAVE_LIBDRM
+-   if (pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false))
++   bool probed = pipe_loader_drm_probe_fd(&screen->dev, screen->fd, false);
++   mesa_logd("channel kgsl: dri2_init_screen fd=%d probe=%d driver=%s",
++             screen->fd, probed, screen->dev ? screen->dev->driver_name : "(null)");
++   if (probed) {
+       pscreen = pipe_loader_create_screen(screen->dev, driver_name_is_inferred);
++      mesa_logd("channel kgsl: pipe_loader_create_screen -> %p", (void *)pscreen);
++   }
+ #endif
+ 
+    return pscreen;
+diff --git a/src/util/u_gralloc/u_gralloc_internal.c b/src/util/u_gralloc/u_gralloc_internal.c
+index c645202..11beaa6 100644
+--- a/src/util/u_gralloc/u_gralloc_internal.c
++++ b/src/util/u_gralloc/u_gralloc_internal.c
+@@ -14,6 +14,30 @@
+ #include "drm-uapi/drm_fourcc.h"
+ #include "util/log.h"
+ 
++/*
++ * QCOM/CAF vendor HAL pixel formats emitted by the msm8953 (Venus) video
++ * decoder. These are NOT present in <hardware/gralloc.h>; the canonical
++ * definitions live in the display HAL's QtiGrallocDefs.h. The "Venus" family
++ * is semi-planar 4:2:0 (a Y plane followed by an interleaved Cb/Cr plane, i.e.
++ * NV12/NV21) with Venus stride/scanline alignment (Y: stride align 128,
++ * scanline align 32; UV: stride align 128, scanline align 16). When UBWC is
++ * disabled (channel: vendor.gralloc.disable_ubwc=1) the _UBWC variant is
++ * allocated as plain linear NV12, which a5xx/freedreno can sample once we
++ * route it through the YUV plane-info path below. We only look these up by
++ * value, so we tolerate a stale <hardware/gralloc.h> that lacks them. */
++#ifndef HAL_PIXEL_FORMAT_NV21_ENCODEABLE
++#define HAL_PIXEL_FORMAT_NV21_ENCODEABLE        0x7FA30C00 /* NV21, Venus aligned */
++#endif
++#ifndef HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS
++#define HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS     0x7FA30C04 /* NV12, Venus aligned */
++#endif
++#ifndef HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS_UBWC
++#define HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS_UBWC 0x7FA30C06 /* NV12 (UBWC when compressed) */
++#endif
++#ifndef HAL_PIXEL_FORMAT_YCrCb_420_SP_VENUS
++#define HAL_PIXEL_FORMAT_YCrCb_420_SP_VENUS     0x114      /* NV21, Venus aligned */
++#endif
++
+ enum chroma_order {
+    YCbCr,
+    YCrCb,
+@@ -37,6 +61,13 @@ static const struct droid_yuv_format droid_yuv_formats[] = {
+    {HAL_PIXEL_FORMAT_YCbCr_420_888, YCbCr, 1, DRM_FORMAT_YUV420},
+    {HAL_PIXEL_FORMAT_YCbCr_420_888, YCrCb, 1, DRM_FORMAT_YVU420},
+    {HAL_PIXEL_FORMAT_YV12, YCrCb, 1, DRM_FORMAT_YVU420},
++   /* QCOM Venus video-decoder formats. Semi-planar => chroma_step 2. The exact
++    * plane offsets/strides come from the gralloc's lock_ycbcr / perform
++    * GET_YUV_PLANE_INFO (Venus alignment), so we only need the fourcc here. */
++   {HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS, YCbCr, 2, DRM_FORMAT_NV12},
++   {HAL_PIXEL_FORMAT_YCbCr_420_SP_VENUS_UBWC, YCbCr, 2, DRM_FORMAT_NV12},
++   {HAL_PIXEL_FORMAT_NV21_ENCODEABLE, YCrCb, 2, DRM_FORMAT_NV21},
++   {HAL_PIXEL_FORMAT_YCrCb_420_SP_VENUS, YCrCb, 2, DRM_FORMAT_NV21},
+    /* HACK: See droid_create_image_from_prime_fds() and
+     * https://issuetracker.google.com/32077885. */
+    {HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED, YCbCr, 2, DRM_FORMAT_NV12},

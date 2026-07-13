@@ -1,0 +1,76 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 02:15:47 -0700
+Subject: [PATCH 1/4] freedreno/drm: let the winsys backend gate fence
+ retirement
+
+cleanup_fences() drops a bo's fence as soon as the shared control->fence has
+caught up with that fence's ufence.  fd_bo_state() then reports the bo IDLE
+and the bo-cache is free to hand it to a new allocation.
+
+That is only correct if control->fence is authoritative for "the GPU is done
+with this batch".  On the downstream KGSL kernel interface it is not:
+control->fence is written by the GPU's CACHE_FLUSH_TS event, which can advance
+before the batch has actually retired.  The bo-cache then recycles a buffer the
+GPU is still writing, those writes land in the buffer's new owner, and the
+result is silent corruption (garbled tiles and icons under UI scroll) with no
+page fault to point at the culprit.
+
+Add an optional fd_pipe_funcs.retired(pipe, kfence) predicate, consulted before
+a fence is pruned, which lets a backend answer the question authoritatively --
+on KGSL by reading the per-context end-of-pipeline RETIRED timestamp.  It is
+left NULL on msm and virtio, where control->fence is authoritative and
+behaviour is unchanged.
+
+kfence is guaranteed to be set by the time cleanup_fences() can reach this
+check: control->fence only reaches ufence once the submit has been flushed to
+the kernel, which is where kfence is stamped.
+---
+ src/freedreno/drm/freedreno_bo.c   | 14 ++++++++++++++
+ src/freedreno/drm/freedreno_priv.h |  8 ++++++++
+ 2 files changed, 22 insertions(+)
+
+diff --git a/src/freedreno/drm/freedreno_bo.c b/src/freedreno/drm/freedreno_bo.c
+index 6eda810..00bbac0 100644
+--- a/src/freedreno/drm/freedreno_bo.c
++++ b/src/freedreno/drm/freedreno_bo.c
+@@ -767,6 +767,20 @@ cleanup_fences(struct fd_bo *bo)
+       if (fd_fence_before(f->pipe->control->fence, f->ufence))
+          continue;
+ 
++      /* channel A17 (KGSL bo-cache recycle fix): control->fence is written by
++       * the GPU's CACHE_FLUSH_TS event, which on KGSL advances before the batch
++       * has truly retired.  Pruning here would let fd_bo_state() report the bo
++       * IDLE and the bo-cache hand a still-in-flight buffer to a new allocation,
++       * so the GPU's pending writes land in the recycled buffer -> icon/tile
++       * corruption with no page fault.  When the backend exposes the kernel
++       * RETIRED timestamp (KGSL), require it to have passed f->kfence before
++       * pruning; no-op (NULL) on msm/virtio where control->fence is
++       * authoritative.  kfence is guaranteed set here: control->fence only
++       * reaches ufence after the submit was flushed to the kernel, which is
++       * where kfence is stamped. */
++      if (f->pipe->funcs->retired && !f->pipe->funcs->retired(f->pipe, f->kfence))
++         continue;
++
+       bo->nr_fences--;
+ 
+       if (bo->nr_fences > 0) {
+diff --git a/src/freedreno/drm/freedreno_priv.h b/src/freedreno/drm/freedreno_priv.h
+index 3a243b6..3deabe4 100644
+--- a/src/freedreno/drm/freedreno_priv.h
++++ b/src/freedreno/drm/freedreno_priv.h
+@@ -310,6 +310,14 @@ struct fd_pipe_funcs {
+                     uint64_t value);
+    int (*wait)(struct fd_pipe *pipe, const struct fd_fence *fence,
+                uint64_t timeout);
++   /* channel A17 (KGSL): optional predicate returning true iff the GPU has
++    * actually retired kfence.  On KGSL the shared control->fence (written by the
++    * GPU's CACHE_FLUSH_TS event) can advance before the batch truly retires, so
++    * cleanup_fences() consults this before pruning a fence - otherwise
++    * fd_bo_state() would report a still-in-flight bo IDLE and the bo-cache would
++    * recycle it under the GPU, corrupting the reused buffer.  Left NULL on
++    * backends (msm/virtio) where control->fence is authoritative. */
++   bool (*retired)(struct fd_pipe *pipe, uint32_t kfence);
+    void (*destroy)(struct fd_pipe *pipe);
+ };
+ 
