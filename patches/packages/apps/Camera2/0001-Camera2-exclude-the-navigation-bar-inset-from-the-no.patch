@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:27:26 -0700
+Subject: [PATCH] Camera2: exclude the navigation-bar inset from the non-decor
+ window size
+
+With edge-to-edge enforced from Android 15 onwards, MainActivityLayout is laid
+out behind the navigation bar rather than being inset by system decor, so the
+height it measured and handed to NonDecorWindowSizeChangedListener included the
+navigation bar. That contradicts the listener contract ("non-decor" size) and
+the preview/UI is laid out too tall, pushing the shutter controls off screen.
+
+Track the system-bars bottom inset in onApplyWindowInsets (without consuming it,
+so the preview still draws full-bleed) and subtract it from the height reported
+to the listener.
+---
+ .../android/camera/ui/MainActivityLayout.java | 22 +++++++++++++++++--
+ 1 file changed, 20 insertions(+), 2 deletions(-)
+
+diff --git a/src/com/android/camera/ui/MainActivityLayout.java b/src/com/android/camera/ui/MainActivityLayout.java
+index 98f708980..9cf41d7c9 100644
+--- a/src/com/android/camera/ui/MainActivityLayout.java
++++ b/src/com/android/camera/ui/MainActivityLayout.java
+@@ -24,6 +24,7 @@ import android.util.AttributeSet;
+ import android.view.MotionEvent;
+ import android.view.View;
+ import android.view.ViewConfiguration;
++import android.view.WindowInsets;
+ import android.widget.FrameLayout;
+ 
+ import com.android.camera.app.CameraAppUI;
+@@ -47,6 +48,11 @@ public class MainActivityLayout extends FrameLayout {
+     private View mTouchReceiver = null;
+     private final boolean mIsCaptureIntent;
+     private CameraAppUI.NonDecorWindowSizeChangedListener mNonDecorWindowSizeChangedListener = null;
++    // With edge-to-edge enforced (Android 15+, current target SDK), this layout extends
++    // behind the navigation bar instead of being inset by system decor. Subtract this
++    // bottom inset from the reported height so the non-decor size keeps excluding the
++    // navigation bar, as its listener contract documents.
++    private int mNavBarBottomInset = 0;
+ 
+     // TODO: This can be removed once we come up with a new design for b/13751653.
+     @Deprecated
+@@ -145,11 +151,23 @@ public class MainActivityLayout extends FrameLayout {
+         mRequestToInterceptTouchEvents = true;
+     }
+ 
++    @Override
++    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
++        int bottomInset = insets.getInsets(WindowInsets.Type.systemBars()).bottom;
++        if (bottomInset != mNavBarBottomInset) {
++            mNavBarBottomInset = bottomInset;
++            requestLayout();
++        }
++        // Not consumed: the fullscreen preview still draws behind the system bars.
++        return super.onApplyWindowInsets(insets);
++    }
++
+     @Override
+     public void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+         if (mNonDecorWindowSizeChangedListener != null) {
++            int height = MeasureSpec.getSize(heightMeasureSpec) - mNavBarBottomInset;
+             mNonDecorWindowSizeChangedListener.onNonDecorWindowSizeChanged(
+-                    MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec),
++                    MeasureSpec.getSize(widthMeasureSpec), height,
+                     CameraUtil.getDisplayRotation((Activity) getContext()));
+         }
+         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+@@ -165,7 +183,7 @@ public class MainActivityLayout extends FrameLayout {
+         mNonDecorWindowSizeChangedListener = listener;
+         if (mNonDecorWindowSizeChangedListener != null) {
+             mNonDecorWindowSizeChangedListener.onNonDecorWindowSizeChanged(
+-                    getMeasuredWidth(), getMeasuredHeight(),
++                    getMeasuredWidth(), getMeasuredHeight() - mNavBarBottomInset,
+                     CameraUtil.getDisplayRotation((Activity) getContext()));
+         }
+     }

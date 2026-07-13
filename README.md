@@ -42,6 +42,19 @@ Everything else that needs changing rides as a patch, applied post-sync by
   the Mesa KGSL graphics port, … (`build/make`, `build/soong`, `external/e2fsprogs`,
   `external/mesa3d`, `external/mksh`, `frameworks/hardware/interfaces`,
   `frameworks/native`, `system/tools/hidl`).
+- **Legacy-vendor adaptations** — the vendor image is frozen at Android 11 and the kernel is
+  4.9, so a few AOSP-base projects need adapting: `system/memory/libion` (AOSP stubbed libion
+  out for dmabuf-heaps devices; the A11 blobs allocate through it, so the real implementation
+  is restored), `hardware/interfaces` (restore an FCM 5 framework matrix — the device manifest
+  is `target-level="5"`), `system/bpf` + `packages/modules/Connectivity` (honour
+  `ro.bpf.kver_override`, so the 4.9 kernel carrying the 5.4-era eBPF backport can declare what
+  it really supports), `system/memory/libmeminfo` (don't abort system_server on the absent
+  gpuMem BPF map), `external/skia` (sample-only AHardwareBuffers as external GL textures — the
+  a5xx upload path corrupts them otherwise), `packages/apps/Camera2` (edge-to-edge nav-bar
+  inset), `packages/modules/Bluetooth` (exit cleanly instead of aborting when the vendor BT
+  controller can't start), `system/core` (libsysutils recovery variant).
+  ⚠️ `patches/system/core/0002-*` **forces SELinux permissive** — a bring-up crutch while the
+  policy is triaged. Drop that patch to build enforcing.
 - **LineageOS graft tweaks** — the grafts are pinned to *unmodified* upstream LineageOS,
   so the handful of changes needed to build them against AOSP-17 (rather than a full
   LineageOS tree) are patches too: `hardware/lineage/compat` (AOSP-17 libgui/gralloc/audio
@@ -53,6 +66,11 @@ Everything else that needs changing rides as a patch, applied post-sync by
 - **A generated namespace stub** — `hardware/qcom-caf/msm8953/Android.bp`. That path is
   owned by no git project (only its `audio/`, `media/`, `display/` children are projects),
   so `repo sync` never creates it and it can't be a patch; the script writes it.
+- **The kernel toolchain** — the script also downloads **clang-r536225** (clang 19, ~1.1 GB)
+  into `prebuilts/clang/host/linux-x86/`. The inline 4.9 kernel *must* be built with it:
+  AOSP-17 ships only clang 20+, which miscompiles this msm-4.9.337 tree (it faults before
+  console init → splash bootloop with no logs). It's a binary toolchain, so it can't ride as
+  a patch; it's still carried on AOSP `main`, which is where the script fetches it from.
 
 (The former gralloc2-mapper and flashlight source patches were migrated off AOSP
 source to device release-config aconfig flag values — see the `vendor/lineage`
@@ -128,7 +146,8 @@ fastboot reboot
 - **Grafts**: LineageOS lineage-23.0, pinned in the manifest to **unmodified** upstream SHAs.
   Six of them need small changes to build against AOSP-17 instead of a full LineageOS tree;
   those ship as patches (see step 2), not forks, so the graft SHAs stay honest.
-- **Patches**: `patches/<project-path>/` (applied by `apply-aosp-patches.sh`) — 8 AOSP-base
-  projects + 6 LineageOS grafts, plus one generated namespace stub. See step 2.
+- **Patches**: `patches/<project-path>/` (applied by `apply-aosp-patches.sh`) — 17 AOSP-base
+  projects + 6 LineageOS grafts, plus one generated namespace stub and the clang-r536225
+  kernel toolchain fetch. See step 2.
 
 All revisions are pinned to exact SHAs in `channel_a17.xml` for reproducibility.

@@ -1,0 +1,57 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:27:53 -0700
+Subject: [PATCH] bpf: honor ro.bpf.kver_override when reporting the kernel
+ version
+
+Devices that backport modern BPF support into an older base kernel still report
+the base version through uname, so the platform's kernel-version gates refuse to
+load programs the kernel can in fact run. channel runs a 4.9 kernel carrying the
+5.4-era eBPF backport, and every KVER gate in the loader chain must agree on the
+declared version.
+
+Let a device set ro.bpf.kver_override=<a.b.c>; when it is set and parseable it
+takes precedence over uname. Unset (the AOSP default) keeps the old behaviour.
+
+Ported from LineageOS gerrit change 436692.
+---
+ bpf/headers/include/bpf/KernelUtils.h | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/bpf/headers/include/bpf/KernelUtils.h b/bpf/headers/include/bpf/KernelUtils.h
+index add20c5391..f7bb868523 100644
+--- a/bpf/headers/include/bpf/KernelUtils.h
++++ b/bpf/headers/include/bpf/KernelUtils.h
+@@ -20,6 +20,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/personality.h>
++#include <sys/system_properties.h>
+ #include <sys/utsname.h>
+ 
+ namespace android {
+@@ -28,12 +29,21 @@ namespace bpf {
+ #define KVER(a, b, c) (((a) << 24) + ((b) << 16) + (c))
+ 
+ static inline unsigned uncachedKernelVersion() {
+-    struct utsname buf;
+-    if (uname(&buf)) abort();
+-
+     unsigned kver_major = 0;
+     unsigned kver_minor = 0;
+     unsigned kver_sub = 0;
++
++    // LineageOS gerrit 436692: let a device declare a higher kernel version than uname reports,
++    // so BPF features backported into an older base kernel are recognized. When
++    // ro.bpf.kver_override=<a.b.c> is set and parseable, it takes precedence over uname.
++    char kver_override[PROP_VALUE_MAX];
++    if (__system_property_get("ro.bpf.kver_override", kver_override) > 0 &&
++        sscanf(kver_override, "%u.%u.%u", &kver_major, &kver_minor, &kver_sub) >= 2) {
++        return KVER(kver_major, kver_minor, kver_sub);
++    }
++
++    struct utsname buf;
++    if (uname(&buf)) abort();
+     if (sscanf(buf.release, "%u.%u.%u", &kver_major, &kver_minor, &kver_sub) < 2) abort();
+     return KVER(kver_major, kver_minor, kver_sub);
+ }

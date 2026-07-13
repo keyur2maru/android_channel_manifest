@@ -1,0 +1,45 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:28:11 -0700
+Subject: [PATCH 2/2] init: force SELinux permissive on channel (bring-up; DROP
+ before release)
+
+channel boots the Android-17 system image on an Android-11-frozen vendor, and the
+policy is still being triaged, so the device is run permissive for now. The usual
+androidboot.selinux=permissive route does not work here: the bootloader appends
+its own DTB bootargs after ours, and its cmdline wins, so init always sees an
+enforcing request.
+
+Short-circuit IsEnforcing() while ALLOW_PERMISSIVE_SELINUX is set (userdebug/eng
+only; user builds still return true unconditionally). This commit is isolated so
+it can be dropped once the denials are triaged and enforcing is revalidated.
+---
+ init/selinux.cpp | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/init/selinux.cpp b/init/selinux.cpp
+index 4baf9a4fe..5258f5eac 100644
+--- a/init/selinux.cpp
++++ b/init/selinux.cpp
+@@ -100,7 +100,7 @@ namespace {
+ 
+ enum EnforcingStatus { SELINUX_PERMISSIVE, SELINUX_ENFORCING };
+ 
+-EnforcingStatus StatusFromProperty() {
++[[maybe_unused]] EnforcingStatus StatusFromProperty() {
+     std::string value;
+     if (android::fs_mgr::GetKernelCmdline("androidboot.selinux", &value) && value == "permissive") {
+         return SELINUX_PERMISSIVE;
+@@ -113,7 +113,11 @@ EnforcingStatus StatusFromProperty() {
+ 
+ bool IsEnforcing() {
+     if (ALLOW_PERMISSIVE_SELINUX) {
+-        return StatusFromProperty() == SELINUX_ENFORCING;
++        // BRING-UP / BRIDGE: force SELinux permissive. The LOS prebuilt kernel's appended-DTB
++        // bootargs override our boot.img androidboot.selinux=permissive, so the cmdline route
++        // doesn't take effect. Force permissive here to unblock the Android-17 boot on the
++        // legacy vendor while we triage denials. Remove to restore the line below for release.
++        return false;  // was: return StatusFromProperty() == SELINUX_ENFORCING;
+     }
+     return true;
+ }

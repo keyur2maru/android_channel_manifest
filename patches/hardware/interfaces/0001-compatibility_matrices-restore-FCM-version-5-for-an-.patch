@@ -1,0 +1,113 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:27:24 -0700
+Subject: [PATCH] compatibility_matrices: restore FCM version 5 for an
+ Android-11-frozen vendor
+
+The channel (Moto G7 Play, sdm632) vendor image is frozen at Android 11, so
+its device manifest declares target-level="5". AOSP-17 only ships framework
+compatibility matrices for FCM 7 and newer, so checkvintf has no framework
+matrix to check the device against and the build fails.
+
+Add back a minimal FCM 5 framework matrix and wire it into both the A17 and
+A18 system matrix module lists. It carries the one deprecated android.* HAL the
+device manifest declares that no in-tree matrix covers (health@2.1 HIDL,
+optional) and a bare <kernel version="4.9.0"/> entry with no config children:
+checkvintf requires a kernel entry at the device's target FCM level, and the
+R-era kernel_config_r_* fragment modules no longer exist in AOSP-17. The device
+launched at API 28, so no R kernel requirements apply to it anyway.
+---
+ compatibility_matrices/Android.bp             | 15 +++++++
+ .../compatibility_matrix.5.xml                | 43 +++++++++++++++++++
+ 2 files changed, 58 insertions(+)
+ create mode 100644 compatibility_matrices/compatibility_matrix.5.xml
+
+diff --git a/compatibility_matrices/Android.bp b/compatibility_matrices/Android.bp
+index e34fdcac35..e1c49cedcf 100644
+--- a/compatibility_matrices/Android.bp
++++ b/compatibility_matrices/Android.bp
+@@ -32,6 +32,8 @@ vintf_compatibility_matrix {
+ // Phony target that installs all system compatibility matrix files
+ // These are the FCMs for in-development devices.
+ SYSTEM_MATRIX_DEPS_A18 = [
++    // FCM 5 (Android R) — back-ported for the Android-11-frozen vendor (target-level=5).
++    "framework_compatibility_matrix.5.xml",
+     "framework_compatibility_matrix.7.xml",
+     "framework_compatibility_matrix.8.xml",
+     "framework_compatibility_matrix.202404.xml",
+@@ -43,6 +45,8 @@ SYSTEM_MATRIX_DEPS_A18 = [
+ 
+ // These are the FCMs that are still supported during QPRs
+ SYSTEM_MATRIX_DEPS_A17 = [
++    // FCM 5 (Android R) — back-ported for the Android-11-frozen vendor (target-level=5).
++    "framework_compatibility_matrix.5.xml",
+     "framework_compatibility_matrix.7.xml",
+     "framework_compatibility_matrix.8.xml",
+     "framework_compatibility_matrix.202404.xml",
+@@ -84,6 +88,17 @@ phony {
+ // DO NOT ADD MORE MODULES BELOW THIS LINE
+ ////////////////////////////////////////////
+ 
++// Back-ported FCM version 5 (Android R) framework matrix for the Android-11-frozen vendor
++// (device manifest target-level="5"). No kernel_configs: device launched at API 28, so R
++// kernel rules aren't enforced and kernel_config_r_* modules don't exist in AOSP-17.
++vintf_compatibility_matrix {
++    name: "framework_compatibility_matrix.5.xml",
++    stem: "compatibility_matrix.5.xml",
++    srcs: [
++        "compatibility_matrix.5.xml",
++    ],
++}
++
+ vintf_compatibility_matrix {
+     name: "framework_compatibility_matrix.7.xml",
+     stem: "compatibility_matrix.7.xml",
+diff --git a/compatibility_matrices/compatibility_matrix.5.xml b/compatibility_matrices/compatibility_matrix.5.xml
+new file mode 100644
+index 0000000000..a906464d26
+--- /dev/null
++++ b/compatibility_matrices/compatibility_matrix.5.xml
+@@ -0,0 +1,43 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     Copyright (C) 2026 DeviceNexus
++
++     Licensed under the Apache License, Version 2.0 (the "License");
++     you may not use this file except in compliance with the License.
++     You may obtain a copy of the License at
++
++          http://www.apache.org/licenses/LICENSE-2.0
++
++     Unless required by applicable law or agreed to in writing, software
++     distributed under the License is distributed on an "AS IS" BASIS,
++     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++     See the License for the specific language governing permissions and
++     limitations under the License.
++-->
++<!--
++     Framework Compatibility Matrix for FCM version 5 (Android R / API level 30).
++     AOSP-17 dropped the R (and S) framework matrices (only ships 7+), but this device's
++     vendor is frozen at Android 11 (device manifest target-level="5"), so checkvintf needs
++     a framework matrix at FCM version 5. The only android.* HAL the device manifest declares
++     that is absent from the in-tree matrices (>=7) is the deprecated health@2.1 HIDL HAL;
++     it is listed here (optional) so checkvintf finds it. Add further deprecated HALs here if
++     checkvintf reports more missing.
++
++     KERNEL: checkvintf enforces that the runtime kernel version matches a <kernel> entry in the
++     matrix at the device's target FCM level (5), independent of kernel_configs. The device runs
++     kernel 4.9; AOSP-17 pruned the kernel_config_r_* modules (R-era config fragments), so we
++     declare a minimal <kernel version="4.9.0"/> with NO <config> children — it satisfies the
++     version match (runtime 4.9.x >= 4.9.0) with zero config requirements to enforce. Without
++     this entry, checkvintf fails: "No kernel entry found for kernel version 4.9 at FCM 5".
++-->
++<compatibility-matrix version="1.0" type="framework" level="5">
++    <hal format="hidl" optional="true">
++        <name>android.hardware.health</name>
++        <version>2.1</version>
++        <interface>
++            <name>IHealth</name>
++            <instance>default</instance>
++        </interface>
++    </hal>
++    <kernel version="4.9.0"/>
++</compatibility-matrix>

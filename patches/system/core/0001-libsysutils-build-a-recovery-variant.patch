@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:28:11 -0700
+Subject: [PATCH 1/2] libsysutils: build a recovery variant
+
+LineageOS recovery links libvolume_manager, which is recovery_available and
+depends on libsysutils. Without a recovery variant the recovery build fails to
+resolve the dependency. All of libsysutils' own dependencies are already
+recovery_available, so this only adds the variant.
+---
+ libsysutils/Android.bp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/libsysutils/Android.bp b/libsysutils/Android.bp
+index 18a6aa655..f4642c9b8 100644
+--- a/libsysutils/Android.bp
++++ b/libsysutils/Android.bp
+@@ -5,6 +5,9 @@ package {
+ cc_library {
+     name: "libsysutils",
+     vendor_available: true,
++    // channel: LineageOS recovery's libvolume_manager (recovery_available) links
++    // this, so it needs a recovery variant. All deps are already recovery_available.
++    recovery_available: true,
+ 
+     srcs: [
+         "src/SocketListener.cpp",

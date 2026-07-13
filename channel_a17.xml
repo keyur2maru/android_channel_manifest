@@ -70,7 +70,10 @@
     apply-aosp-patches.sh. Nothing here is forked; the patches live in patches/<project-path>/.
 
       AOSP base:  build/make  build/soong  external/e2fsprogs  external/mesa3d  external/mksh
-                  frameworks/hardware/interfaces  frameworks/native  system/tools/hidl
+                  external/skia  frameworks/hardware/interfaces  frameworks/native
+                  hardware/interfaces  packages/apps/Camera2  packages/modules/Bluetooth
+                  packages/modules/Connectivity  system/bpf  system/core  system/memory/libion
+                  system/memory/libmeminfo  system/tools/hidl
       LOS grafts: hardware/lineage/compat  hardware/lineage/interfaces  hardware/motorola
                   hardware/qcom-caf/wlan  vendor/codeaurora/telephony
                   vendor/qcom/opensource/dataservices
@@ -79,8 +82,19 @@
      displayservice@1.0 HIDL interface. The former frameworks/base flashlight patch was migrated to a
      vendor/lineage release-config aconfig flag value and is no longer a source patch.)
 
+    The legacy-vendor adaptations: system/memory/libion restores the real ION implementation (AOSP
+    stubbed it out; the A11 blobs allocate through it), hardware/interfaces restores an FCM 5
+    framework matrix (vendor is frozen at target-level 5), system/bpf + packages/modules/Connectivity
+    honour ro.bpf.kver_override (4.9 kernel carrying the 5.4-era eBPF backport), system/memory/libmeminfo
+    stops aborting on the absent gpuMem BPF map, external/skia + packages/apps/Camera2 are display/UI
+    fixes for the a5xx GL path and edge-to-edge, packages/modules/Bluetooth degrades gracefully when
+    the vendor BT controller can't start, and system/core adds a libsysutils recovery variant.
+    ⚠️ system/core patch 0002 forces SELinux permissive — a BRING-UP crutch, drop it before release.
+
     apply-aosp-patches.sh also generates hardware/qcom-caf/msm8953/Android.bp — a soong_namespace
     stub at a path no git project owns (only its audio/media/display children are projects), so it
-    cannot ride as a patch and repo sync never creates it.
+    cannot ride as a patch and repo sync never creates it — and fetches the clang-r536225 kernel
+    toolchain into prebuilts/clang/host/linux-x86 (AOSP-17 ships only clang 20+, which miscompiles
+    this 4.9 kernel; a 3.6 GB binary toolchain cannot ride as a patch either).
   -->
 </manifest>

@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:27:54 -0700
+Subject: [PATCH] bpfloader: honor ro.bpf.kver_override when reporting the
+ kernel version
+
+The Rust bpfloader gates program loading on the uname kernel version, so a
+device that has backported modern eBPF support into an older base kernel (channel
+runs 4.9 with the 5.4-era eBPF backport) is refused programs its kernel supports.
+
+Read ro.bpf.kver_override first and use it when set; fall back to uname
+otherwise. This matches the same override honoured in the Connectivity BPF
+headers, so the whole loader chain agrees on one declared version.
+
+Ported from LineageOS gerrit change 469510.
+---
+ loader/bpfloader.rs | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/loader/bpfloader.rs b/loader/bpfloader.rs
+index 1292c31..1efb7b9 100644
+--- a/loader/bpfloader.rs
++++ b/loader/bpfloader.rs
+@@ -486,6 +486,13 @@ fn parse_release(release: &str) -> (u32, u32, u32) {
+ }
+ 
+ fn kernel_version() -> Result<u32, anyhow::Error> {
++    // LineageOS gerrit 469510: honor ro.bpf.kver_override so a device with BPF features
++    // backported into an older base kernel can declare the higher version. Takes precedence
++    // over uname when set.
++    if let Some(kver_override) = system_properties::read("ro.bpf.kver_override")? {
++        let (major, minor, sub) = parse_release(&kver_override);
++        return Ok(kver(major, minor, sub));
++    }
+     let mut buf: MaybeUninit<utsname> = MaybeUninit::zeroed();
+     // SAFETY: If uname returns 0, the buf should be properly initialized.
+     if unsafe { uname(buf.as_mut_ptr()) } != 0 {

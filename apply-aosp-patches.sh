@@ -90,3 +90,34 @@ while IFS= read -r d; do
 done < <(find "$PATCHES" -mindepth 1 -type d | sort)
 
 echo "done: $applied project(s) patched, $skipped skipped."
+
+##
+## Step 3 — fetch the clang-r536225 kernel toolchain.
+##
+## The inline 4.9 kernel build pins TARGET_KERNEL_CLANG_VERSION := r536225 (clang 19), the
+## toolchain the OEM/LineageOS used for this msm-4.9.337 tree. AOSP-17's prebuilts/clang only
+## ships clang 20+ (r547379 …), and building this kernel with clang 20 MISCOMPILES it (faults
+## before console init -> splash bootloop, no pstore). r536225 is still carried on other AOSP
+## branches, so fetch it into the prebuilts project (untracked there — it is a 3.6 GB binary
+## toolchain, not something that can ride as a patch).
+##
+CLANG_VER=r536225
+CLANG_DIR="$TOP/prebuilts/clang/host/linux-x86/clang-$CLANG_VER"
+CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-$CLANG_VER.tar.gz"
+
+if [ -x "$CLANG_DIR/bin/clang" ]; then
+  echo "OK    prebuilts/clang/host/linux-x86/clang-$CLANG_VER  (kernel toolchain already present)"
+else
+  echo "FETCH clang-$CLANG_VER kernel toolchain (~1.1 GB download, ~3.6 GB unpacked)"
+  mkdir -p "$CLANG_DIR"
+  # gitiles +archive tarballs have no top-level directory — unpack straight into the dir.
+  if ! curl -fL --retry 3 "$CLANG_URL" | tar xz -C "$CLANG_DIR"; then
+    echo "  ERROR: could not fetch $CLANG_URL" >&2
+    echo "  The kernel will NOT boot if built with AOSP-17's clang 20. Fetch clang-$CLANG_VER" >&2
+    echo "  manually into $CLANG_DIR (try the android16-release branch if main has pruned it)." >&2
+    rmdir "$CLANG_DIR" 2>/dev/null || true
+    exit 1
+  fi
+  [ -x "$CLANG_DIR/bin/clang" ] || { echo "  ERROR: unpacked toolchain has no bin/clang" >&2; exit 1; }
+  echo "OK    clang-$CLANG_VER unpacked ($("$CLANG_DIR/bin/clang" --version | head -1))"
+fi
