@@ -36,7 +36,11 @@ scaffolding), and the `channel` forks (github.com/keyur2maru).
 
 The device / kernel / hardware / graphics changes are git forks pinned by the manifest.
 A few small AOSP framework/build tweaks (xz ramdisk, `perl` in the build sandbox, a
-gralloc2 mapper fix, a flashlight fix, a recovery HAL bump, …) ride as patches:
+recovery HAL bump, …) ride as patches:
+
+(The former gralloc2-mapper and flashlight source patches were migrated off AOSP
+source to device release-config aconfig flag values — see the `vendor/lineage`
+fork; that fork is required for those two behaviors.)
 
 ```bash
 bash android_channel_manifest/apply-aosp-patches.sh   # run from the AOSP tree root

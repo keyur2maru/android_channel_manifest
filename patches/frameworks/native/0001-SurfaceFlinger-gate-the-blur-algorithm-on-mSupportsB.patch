@@ -1,7 +1,7 @@
 From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Keyur Maru <kd2maru@gmail.com>
 Date: Fri, 10 Jul 2026 19:12:27 -0700
-Subject: [PATCH 2/2] SurfaceFlinger: gate the blur algorithm on mSupportsBlur
+Subject: [PATCH] SurfaceFlinger: gate the blur algorithm on mSupportsBlur
 
 init() hard-coded chooseBlurAlgorithm(true), forcing blur pipeline setup even
 when blur is not supported. Use mSupportsBlur so it follows the device/
