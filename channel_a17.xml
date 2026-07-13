@@ -54,7 +54,10 @@
   <!--
     The following AOSP projects carry small downstream patches (applied post-sync by the manifest repo's
     apply-aosp-patches.sh); they stay on the AOSP base manifest:
-      build/make  build/soong  external/e2fsprogs  external/mksh
-      frameworks/base  frameworks/hardware/interfaces  frameworks/native
+      build/make  build/soong  external/e2fsprogs  external/mesa3d  external/mksh
+      frameworks/hardware/interfaces  frameworks/native  system/tools/hidl
+    (external/mesa3d = the KGSL winsys graphics port; system/tools/hidl = allowlist the restored
+     displayservice@1.0 HIDL interface. The former frameworks/base flashlight patch was migrated to a
+     vendor/lineage release-config aconfig flag value and is no longer a source patch.)
   -->
 </manifest>
