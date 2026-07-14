@@ -24,7 +24,7 @@
   <project path="vendor/qcom/opensource/commonsys-intf/display" name="android_vendor_qcom_opensource_display-commonsys-intf" remote="keyur" revision="c8ea6097bc44c86927a5ade94a426ff267f1c1bc" />
   <project path="device/qcom/sepolicy-legacy-um" name="android_device_qcom_sepolicy" remote="keyur" revision="096c6a9873e54dfdc047e2164d6f42f34009daf3" />
   <project path="bootable/recovery" name="android_bootable_recovery" remote="keyur" revision="b4470eee62dc3b295ecb68b51298354942a74f63" />
-  <project path="device/motorola/sdm632-common" name="android_device_motorola_sdm632-common" remote="keyur" revision="b479dc688580f04a1f46322a4d02fd8b9d02d3ab" />
+  <project path="device/motorola/sdm632-common" name="android_device_motorola_sdm632-common" remote="keyur" revision="161adb20800de8ae1d9411aac39d46f4eb826ab7" />
   <project path="device/motorola/channel" name="android_device_motorola_channel" remote="keyur" revision="2df4df0441d15a7429df7b649ffd5312395abc8a" />
   <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="c641c35d2620226274a6064f82e2d0b6d42bb417" />
   <!-- vendor/lineage is a FORK, not a graft: it carries the AOSP-17 port of LineageOS's
