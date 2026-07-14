@@ -102,11 +102,15 @@ Everything else that needs changing rides as a patch, applied post-sync by
 - **A generated namespace stub** — `hardware/qcom-caf/msm8953/Android.bp`. That path is
   owned by no git project (only its `audio/`, `media/`, `display/` children are projects),
   so `repo sync` never creates it and it can't be a patch; the script writes it.
-- **The kernel toolchain** — the script also downloads **clang-r536225** (clang 19, ~1.1 GB)
-  into `prebuilts/clang/host/linux-x86/`. The inline 4.9 kernel *must* be built with it:
-  AOSP-17 ships only clang 20+, which miscompiles this msm-4.9.337 tree (it faults before
-  console init → splash bootloop with no logs). It's a binary toolchain, so it can't ride as
-  a patch; it's still carried on AOSP `main`, which is where the script fetches it from.
+The inline 4.9 kernel builds with the clang **AOSP already ships** (`r584948`, soong's
+`ClangDefaultVersion`) — **no toolchain is fetched out of band.** This tree used to pin
+clang-r536225 (clang 19, downloaded separately) on the belief that newer clang miscompiles
+this msm-4.9.337 tree. That was wrong: newer clang does not miscompile the kernel, it
+declines to compile it. `-Wdefault-const-init-*` and `-Wimplicit-enum-enum-cast` (neither
+existed in clang 19) reject five genuine bugs in the QCOM `techpack/audio` vendor code —
+`const` objects that are written after declaration, and result codes returned from the wrong
+enum. Those are fixed in the kernel fork, and the resulting kernel boots with BTF, the eBPF
+programs and Mesa all intact.
 
 (The former gralloc2-mapper and flashlight source patches were migrated off AOSP
 source to device release-config aconfig flag values — see the `vendor/lineage`
@@ -183,7 +187,7 @@ fastboot reboot
   Six of them need small changes to build against AOSP-17 instead of a full LineageOS tree;
   those ship as patches (see step 2), not forks, so the graft SHAs stay honest.
 - **Patches**: `patches/<project-path>/` (applied by `apply-aosp-patches.sh`) — 17 AOSP-base
-  projects + 6 LineageOS grafts, plus one generated namespace stub and the clang-r536225
-  kernel toolchain fetch. See step 2.
+  projects + 6 LineageOS grafts, plus one generated namespace stub. See step 2. No toolchain
+  is fetched: the kernel builds with the clang AOSP already ships.
 
 All revisions are pinned to exact SHAs in `channel_a17.xml` for reproducibility.
