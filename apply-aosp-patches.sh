@@ -56,6 +56,14 @@ write_stub hardware/qcom-caf/msm8953/Android.bp 'soong_namespace {
     ],
 }'
 
+## external/aospext/Android.mk is a legacy Android.mk, which AOSP's androidmk denylist
+## rejects outright ("every build fatals"). The supported escape hatch is an allowlist at
+## vendor/google/build/androidmk/allowlist.txt — a path no git project owns, so it can't
+## ride as a patch either. Without it, Mesa3D never builds: no libEGL_mesa.so, and since
+## ro.hardware.egl=mesa the ROM bootloops (surfaceflinger: "couldn't find an OpenGL ES
+## implementation").
+write_stub vendor/google/build/androidmk/allowlist.txt 'external/aospext/Android.mk'
+
 ##
 ## Step 2 — apply the per-project patches.
 ##

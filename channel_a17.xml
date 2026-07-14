@@ -11,8 +11,9 @@
   All revisions below are pinned to exact SHAs for reproducibility.
 -->
 <manifest>
-  <remote name="keyur" fetch="https://github.com/keyur2maru" />
-  <remote name="los"   fetch="https://github.com/LineageOS" />
+  <remote name="keyur"    fetch="https://github.com/keyur2maru" />
+  <remote name="los"      fetch="https://github.com/LineageOS" />
+  <remote name="glodroid" fetch="https://github.com/GloDroid" />
 
   <!-- AOSP projects replaced by downstream forks/grafts -->
   <remove-project name="platform/bootable/recovery" />
@@ -31,6 +32,18 @@
        generated_kernel_headers). Without it soong_build cannot bootstrap the plugin and the
        tree will not build at all. It also carries the device release-config aconfig values. -->
   <project path="vendor/lineage" name="android_vendor_lineage" remote="keyur" revision="e5aae1892a0dd2a9074f777b4ebd333eb3abd8b6" />
+
+  <!-- ===== third-party: AOSPEXT — github.com/GloDroid/aospext (Apache-2.0), tracked upstream ===== -->
+  <!-- This is what actually BUILDS Mesa3D: sdm632-common sets BOARD_BUILD_AOSPEXT_MESA3D, which is
+       consumed by external/aospext/meson_mesa3d.mk. Without this project that flag is a SILENT
+       no-op — the build still reports success, but no libEGL_mesa.so / libGLESv2_mesa.so /
+       libGLESv1_CM_mesa.so is produced. Since vendor.prop sets ro.hardware.egl=mesa, the resulting
+       ROM flashes fine and then BOOTLOOPS: surfaceflinger aborts with "couldn't find an OpenGL ES
+       implementation", taking zygote down with it.
+       Also requires: host meson + ninja + pkg-config (see README), and the androidmk allowlist entry
+       vendor/google/build/androidmk/allowlist.txt, which apply-aosp-patches.sh generates (that path
+       is owned by no git project, so it cannot ride as a patch). -->
+  <project path="external/aospext" name="aospext" remote="glodroid" revision="8c3075ffb6005b1c317e69d4da4071dc2403e0f9" />
 
   <!-- ===== LineageOS grafts (pinned to upstream LOS) — github.com/LineageOS =====
        Grafts marked (+patch) are synced UNMODIFIED from LineageOS and then carry a small
