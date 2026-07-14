@@ -1,0 +1,77 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Keyur Maru <kd2maru@gmail.com>
+Date: Mon, 13 Jul 2026 05:27:48 -0700
+Subject: [PATCH] Bluetooth: exit cleanly when the vendor HAL reports
+ controller init failure
+
+The HIDL backend asserts on a non-SUCCESS initializationComplete status, which
+raises SIGABRT inside com.android.bluetooth. On a port whose controller cannot
+be brought up at all (the vendor HAL reports "Controller Init failed"), that
+tombstone is counted as a native crash: BluetoothManagerService restarts the
+stack, it aborts again, and PackageWatchdog/RescueParty escalates and can end up
+rebooting the device.
+
+The GD startup path has no clean "HAL failed to start -> disable" route, and
+faking SUCCESS just moves the abort to the HCI-reset timeout. So when the vendor
+HAL says the controller is unusable, log it and _Exit(0) instead: at the binder
+layer this looks the same to BluetoothManagerService, which runs its bounded
+retry/backoff and then leaves the adapter cleanly OFF, but with no SIGABRT, no
+tombstone and no crash accounting. Devices whose controller initializes normally
+never take this branch.
+---
+ system/gd/hal/hci_backend_hidl.cc | 35 ++++++++++++++++++++++++++++++-
+ 1 file changed, 34 insertions(+), 1 deletion(-)
+
+diff --git a/system/gd/hal/hci_backend_hidl.cc b/system/gd/hal/hci_backend_hidl.cc
+index 96bc1a042e..9103a02e14 100644
+--- a/system/gd/hal/hci_backend_hidl.cc
++++ b/system/gd/hal/hci_backend_hidl.cc
+@@ -20,6 +20,8 @@
+ #include <bluetooth/log.h>
+ #include <com_android_bluetooth_flags.h>
+ 
++#include <cstdlib>
++
+ #include "common/stop_watch.h"
+ #include "common/watchdog.h"
+ #include "hal/hci_backend.h"
+@@ -44,7 +46,38 @@ public:
+ 
+   using HidlStatus = ::android::hardware::bluetooth::V1_0::Status;
+   Return<void> initializationComplete(HidlStatus status) override {
+-    log::assert_that(status == HidlStatus::SUCCESS, "status == HidlStatus::SUCCESS");
++    // Graceful degradation for hardware bring-up.
++    //
++    // On some ports the vendor Bluetooth controller cannot be brought up at all
++    // (e.g. the Qualcomm WCNSS/pronto subsystem is not loaded on this device, so
++    // the controller never returns a valid build version and the vendor HAL
++    // reports "Controller Init failed" / status != SUCCESS here).
++    //
++    // Upstream unconditionally LOG(FATAL)s on a non-SUCCESS status. That raises
++    // SIGABRT inside com.android.bluetooth, producing a tombstone that
++    // PackageWatchdog/RescueParty counts as a native crash. Repeated across the
++    // BluetoothManagerService restart attempts this escalates RescueParty and
++    // can reboot the device.
++    //
++    // The Bluetooth stack has no clean "HAL failed to start -> disable" path
++    // (the whole GD startup is built on fatal asserts), and faking SUCCESS only
++    // moves the abort to the subsequent HCI-reset timeout. So when the vendor
++    // HAL tells us the controller is unusable, exit the process cleanly instead
++    // of aborting: at the binder layer this is indistinguishable from a crash,
++    // so BluetoothManagerService still runs its bounded retry/backoff and then
++    // leaves the adapter cleanly OFF (MAX_ERROR_RESTART_RETRIES) -- but with no
++    // SIGABRT, no tombstone, and no RescueParty crash accounting. This branch is
++    // a no-op on devices whose controller initializes normally.
++    if (status != HidlStatus::SUCCESS) {
++      log::error(
++              "Bluetooth controller initialization failed (status={}). The vendor "
++              "HAL reports the controller is not usable on this device; shutting "
++              "down Bluetooth gracefully instead of aborting.",
++              static_cast<uint32_t>(status));
++      // Clean, immediate exit: no signal, no atexit/global destructors, no
++      // tombstone. Not counted as a crash by PackageWatchdog/RescueParty.
++      std::_Exit(0);
++    }
+     callbacks_->initializationComplete();
+     return Void();
+   }
