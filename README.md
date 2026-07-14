@@ -10,6 +10,40 @@ camera / flashlight work.
   and `repo`, ~400 GB free disk, 16 GB+ RAM.
 - A Moto G7 Play with an **unlocked bootloader**.
 
+### Extra host packages (on top of the stock AOSP prerequisites)
+
+The stock AOSP prerequisite list is **not sufficient** for this tree — it builds an inline 4.9
+kernel and builds Mesa3D from source. Install these as well:
+
+```bash
+sudo apt-get install -y libssl-dev libelf-dev ninja-build pkg-config
+pip3 install --user meson        # meson >= 1.0 (use --break-system-packages on PEP-668 distros)
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+| Package | Needed by | If it's missing |
+|---|---|---|
+| `libssl-dev` | the inline 4.9 kernel's `scripts/extract-cert` (`#include <openssl/bio.h>`) | Kernel build **fails loudly**: `fatal error: 'openssl/bio.h' file not found`. |
+| `meson`, `ninja-build`, `pkg-config` | the Mesa3D/aospext build (`BOARD_BUILD_AOSPEXT_MESA3D := true`) | ⚠️ **Fails silently.** The build still reports **success**, but Mesa is skipped and no `libEGL_mesa.so` / `libGLESv2_mesa.so` / `libGLESv1_CM_mesa.so` is produced. Since `ro.hardware.egl=mesa`, the ROM then flashes fine and **bootloops**: `surfaceflinger` aborts with `couldn't find an OpenGL ES implementation, make sure one of persist.graphics.egl, ro.hardware.egl and ro.board.platform is set`, which takes zygote down with it. |
+| `libelf-dev` | kernel host tooling | Kernel build errors. |
+
+To confirm Mesa actually built, check that the EGL drivers exist before flashing:
+
+```bash
+ls out/target/product/channel/vendor/lib64/egl/
+# must contain: libEGL_mesa.so  libGLESv2_mesa.so  libGLESv1_CM_mesa.so
+```
+
+**Gotcha — non-interactive build shells.** `meson` (from `pip --user`) lives in `~/.local/bin`, and
+ccache needs `CCACHE_EXEC`. Both are typically set in `.bashrc`, which a non-interactive build
+script **does not source**. Export them in whatever drives your build:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"   # so the Mesa/aospext build can find meson
+export USE_CCACHE=1
+export CCACHE_EXEC=/usr/bin/ccache     # USE_CCACHE=1 alone is silently inert without this
+```
+
 ## 1. Init + sync
 
 ```bash
