@@ -24,9 +24,9 @@
   <project path="vendor/qcom/opensource/commonsys-intf/display" name="android_vendor_qcom_opensource_display-commonsys-intf" remote="keyur" revision="c8ea6097bc44c86927a5ade94a426ff267f1c1bc" />
   <project path="device/qcom/sepolicy-legacy-um" name="android_device_qcom_sepolicy" remote="keyur" revision="096c6a9873e54dfdc047e2164d6f42f34009daf3" />
   <project path="bootable/recovery" name="android_bootable_recovery" remote="keyur" revision="b4470eee62dc3b295ecb68b51298354942a74f63" />
-  <project path="device/motorola/sdm632-common" name="android_device_motorola_sdm632-common" remote="keyur" revision="2abe67efa2aa4ad6433b67c3eb06f30f987d0c29" />
+  <project path="device/motorola/sdm632-common" name="android_device_motorola_sdm632-common" remote="keyur" revision="3132187e8154d557274af0e3ae02756296b588bf" />
   <project path="device/motorola/channel" name="android_device_motorola_channel" remote="keyur" revision="2df4df0441d15a7429df7b649ffd5312395abc8a" />
-  <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="a741ec15412d7447757fb5f13d1635471a36254f" />
+  <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="7474a11144749511dad2c1f1e4d40e57ae2ac486" />
   <!-- vendor/lineage is a FORK, not a graft: it carries the AOSP-17 port of LineageOS's
        lineage_generator soong plugin (the module type behind generated_kernel_includes /
        generated_kernel_headers). Without it soong_build cannot bootstrap the plugin and the

@@ -16,7 +16,7 @@ The stock AOSP prerequisite list is **not sufficient** for this tree — it buil
 kernel and builds Mesa3D from source. Install these as well:
 
 ```bash
-sudo apt-get install -y libssl-dev libelf-dev ninja-build pkg-config python3-mako python3-yaml
+sudo apt-get install -y libssl-dev libelf-dev dwarves ninja-build pkg-config python3-mako python3-yaml
 pip3 install --user meson        # meson >= 1.0 (use --break-system-packages on PEP-668 distros)
 export PATH="$HOME/.local/bin:$PATH"
 ```
@@ -27,6 +27,7 @@ export PATH="$HOME/.local/bin:$PATH"
 | `meson`, `ninja-build`, `pkg-config` | the Mesa3D/aospext build (`BOARD_BUILD_AOSPEXT_MESA3D := true`, consumed by `external/aospext`) | ⚠️ **Fails silently.** The build still reports **success**, but Mesa is skipped and no `libEGL_mesa.so` / `libGLESv2_mesa.so` / `libGLESv1_CM_mesa.so` is produced. Since `ro.hardware.egl=mesa`, the ROM then flashes fine and **bootloops**: `surfaceflinger` aborts with `couldn't find an OpenGL ES implementation, make sure one of persist.graphics.egl, ro.hardware.egl and ro.board.platform is set`, which takes zygote down with it. |
 | `python3-mako` | Mesa's meson code generation | Mesa configure **fails**: `ERROR: Python (3.x) mako module >= 0.8.0 required to build mesa`. |
 | `libelf-dev` | kernel host tooling | Kernel build errors. |
+| `dwarves` (provides `pahole`) | generating the kernel's BTF type info (`CONFIG_DEBUG_INFO_BTF`), which the CO-RE eBPF programs (`timeInState`, `dmabufIter`) need | Kernel build **fails loudly**: `BTF: vmlinux: pahole is not available, but CONFIG_DEBUG_INFO_BTF is enabled`. Ubuntu 22.04 and 24.04 both ship pahole v1.25, the version this tree's BTF is validated against. |
 
 To confirm Mesa actually built, check that the EGL drivers exist before flashing:
 
