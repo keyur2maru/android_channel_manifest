@@ -26,7 +26,7 @@
   <project path="bootable/recovery" name="android_bootable_recovery" remote="keyur" revision="b4470eee62dc3b295ecb68b51298354942a74f63" />
   <project path="device/motorola/sdm632-common" name="android_device_motorola_sdm632-common" remote="keyur" revision="91802698f04a668d02c6e594f68c77776ca3dedb" />
   <project path="device/motorola/channel" name="android_device_motorola_channel" remote="keyur" revision="2df4df0441d15a7429df7b649ffd5312395abc8a" />
-  <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="c641c35d2620226274a6064f82e2d0b6d42bb417" />
+  <project path="kernel/motorola/sdm632" name="android_kernel_motorola_sdm632" remote="keyur" revision="c2393b739e68a1c4dbc94ca86a7cf7b44f89edd5" />
   <!-- vendor/lineage is a FORK, not a graft: it carries the AOSP-17 port of LineageOS's
        lineage_generator soong plugin (the module type behind generated_kernel_includes /
        generated_kernel_headers). Without it soong_build cannot bootstrap the plugin and the
