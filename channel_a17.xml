@@ -70,10 +70,9 @@
     apply-aosp-patches.sh. Nothing here is forked; the patches live in patches/<project-path>/.
 
       AOSP base:  build/make  build/soong  external/e2fsprogs  external/mesa3d  external/mksh
-                  external/skia  frameworks/hardware/interfaces  frameworks/native
-                  hardware/interfaces  packages/apps/Camera2  packages/modules/Bluetooth
-                  packages/modules/Connectivity  system/bpf  system/core  system/memory/libion
-                  system/memory/libmeminfo  system/tools/hidl
+                  frameworks/hardware/interfaces  frameworks/native  hardware/interfaces
+                  packages/apps/Camera2  packages/modules/Connectivity  system/bpf  system/core
+                  system/memory/libion  system/tools/hidl
       LOS grafts: hardware/lineage/compat  hardware/lineage/interfaces  hardware/motorola
                   hardware/qcom-caf/wlan  vendor/codeaurora/telephony
                   vendor/qcom/opensource/dataservices
@@ -85,10 +84,8 @@
     The legacy-vendor adaptations: system/memory/libion restores the real ION implementation (AOSP
     stubbed it out; the A11 blobs allocate through it), hardware/interfaces restores an FCM 5
     framework matrix (vendor is frozen at target-level 5), system/bpf + packages/modules/Connectivity
-    honour ro.bpf.kver_override (4.9 kernel carrying the 5.4-era eBPF backport), system/memory/libmeminfo
-    stops aborting on the absent gpuMem BPF map, external/skia + packages/apps/Camera2 are display/UI
-    fixes for the a5xx GL path and edge-to-edge, packages/modules/Bluetooth degrades gracefully when
-    the vendor BT controller can't start, and system/core adds a libsysutils recovery variant.
+    honour ro.bpf.kver_override (4.9 kernel carrying the 5.4-era eBPF backport), packages/apps/Camera2
+    is an edge-to-edge UI fix, and system/core adds a libsysutils recovery variant.
     ⚠️ system/core patch 0002 forces SELinux permissive — a BRING-UP crutch, drop it before release.
 
     apply-aosp-patches.sh also generates hardware/qcom-caf/msm8953/Android.bp — a soong_namespace
